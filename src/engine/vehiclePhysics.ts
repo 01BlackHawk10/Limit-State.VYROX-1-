@@ -52,6 +52,7 @@ export interface RaceConfig {
   mode: GameMode;
   lapCount: number; // 0 = Unlimited
   difficulty?: RaceDifficulty;
+  includeAiRivals?: boolean;
   targetStints?: number; // Derived stint count across raceLengthLaps
   strategyPreset?: StintStrategyPreset;
   startCountdownMode?: StartCountdownMode;
@@ -2413,6 +2414,7 @@ export class VehiclePhysicsEngine {
   private lastCstAssistDeg = 0;
   private lastSlipBodyDeg = 0;
   private latG = 0;
+  private latGTransferFiltered = 0;
   private lonG = 0;
   private prevThrottleSmooth = 0;
 
@@ -3024,7 +3026,7 @@ export class VehiclePhysicsEngine {
       : Math.max(0.008, this.startFinishT - 14 / this.circuit.totalLength);
     const sample = this.circuit.sampleAtT(startT);
     this.pos.copy(sample.position);
-    if (this.raceConfig.mode === 'sprint') {
+    if (this.raceConfig.mode === 'sprint' && this.raceConfig.includeAiRivals !== false) {
       this.pos.addScaledVector(sample.right, 2.2);
     }
     this.vy = 0;
@@ -3057,6 +3059,7 @@ export class VehiclePhysicsEngine {
     this.rollVel = 0;
     this.heaveVel = 0;
     this.latG = 0;
+    this.latGTransferFiltered = 0;
     this.lonG = 0;
     this.wheelOmega = [0, 0, 0, 0];
     this.wheelSpins = [0, 0, 0, 0];
@@ -3204,6 +3207,9 @@ export class VehiclePhysicsEngine {
     this.lastGovCapDeg = 0;
     this.lastCstAssistDeg = 0;
     this.lastSlipBodyDeg = 0;
+    this.latG = 0;
+    this.latGTransferFiltered = 0;
+    this.lonG = 0;
     this.cleanLap = false;
     this.hazardImpactTimer = 0;
     this.yellowHoldTimer = 0;
@@ -3803,14 +3809,23 @@ export class VehiclePhysicsEngine {
       const layer2SteerDeg = clamp(this.steerRampDeg, -maxAngleDeg, maxAngleDeg);
       this.steerRampDeg = layer2SteerDeg;
 
-      // Layer 4 — Countersteer Assist (8° deadband, never exceeds maxAngle(v), only gear >= 1)
+      // Layer 4 — Countersteer Assist (high-speed smooth progressive deadband, never jerks at low speed or zero-steer bumps)
       const slipBodyDeg =
-        speed > 0.5 ? (Math.atan2(vLat, Math.max(Math.abs(vLong), 0.1)) * 180) / Math.PI : 0;
+        vLong > 3.5 ? (Math.atan2(vLat, Math.max(Math.abs(vLong), 3.5)) * 180) / Math.PI : 0;
       this.lastSlipBodyDeg = slipBodyDeg;
       let cstAssistDeg = 0;
-      if (cstEnabled && this.gear >= 1 && Math.abs(slipBodyDeg) > 8.0) {
+      if (cstEnabled && this.gear >= 1 && vLong > 5.5 && Math.abs(slipBodyDeg) > 9.0) {
+        const speedFade = clamp((vLong - 5.5) / 5.5, 0, 1);
+        const yawIntentGate =
+          Math.abs(rawSteerIn) < 0.025 && Math.abs(this.omega) < 0.16
+            ? 0
+            : clamp(Math.max(Math.abs(rawSteerIn) / 0.08, (Math.abs(this.omega) - 0.10) / 0.22), 0, 1);
+        const absSlip = Math.abs(slipBodyDeg);
+        const slipRamp = clamp((absSlip - 9.0) / 5.0, 0, 1);
         const slipSign = slipBodyDeg > 0 ? 1 : -1;
-        cstAssistDeg = slipSign * Math.min((Math.abs(slipBodyDeg) - 8.0) * 0.6, maxAngleDeg);
+        cstAssistDeg =
+          slipSign *
+          Math.min((absSlip - 9.0) * 0.55 * slipRamp * speedFade * yawIntentGate, maxAngleDeg);
       }
       this.lastCstAssistDeg = cstAssistDeg;
 
@@ -4119,7 +4134,7 @@ export class VehiclePhysicsEngine {
       );
       const totalNormal = fzFrontAxle + fzRearAxle;
       const latTransfer = clamp(
-        (activeMassKg * this.latG * 9.81 * cgHeight) / effTrackWidth,
+        (activeMassKg * this.latGTransferFiltered * 9.81 * cgHeight) / effTrackWidth,
         -totalNormal * 0.37,
         totalNormal * 0.37,
       );
@@ -4354,7 +4369,8 @@ export class VehiclePhysicsEngine {
           const vCornerLong = vLong - this.omega * wheelCoordsX[i];
           const vCornerLat = vLat + this.omega * wheelCoordsZ[i];
           const isFront = i < 2;
-          const toeSign = i % 2 === 0 ? 1 : -1;
+          // +X is left, +Z is forward, +dAng steers left (+X): +toeDeg (Toe-In) points left wheel right (-) and right wheel left (+)
+          const toeSign = i % 2 === 0 ? -1 : 1;
           const toeStatic = toeSign * (isFront ? toeFrontRad : toeRearRad) * 0.45;
           const dAng = steerAngles[i] + toeStatic;
           const cD = Math.cos(dAng);
@@ -4409,15 +4425,17 @@ export class VehiclePhysicsEngine {
 
             const fxPure = cap * camberLongPenalty * pacejkaMagic(this.kappaLag[i], 13.8 * stiff, 1.38, 0.25, 0.10);
             const effectiveLatGForCamber =
-              Math.abs(this.latG) > 0.08 ? this.latG - Math.sign(this.latG) * 0.08 : 0;
+              Math.abs(this.latGTransferFiltered) > 0.16
+                ? this.latGTransferFiltered - Math.sign(this.latGTransferFiltered) * 0.16
+                : 0;
             const camberThrust =
               (i % 2 === 0 ? 1 : -1) *
               clamp(effectiveLatGForCamber, -2.5, 2.5) *
-              (0.006 + Math.abs(axCamberDeg) * 0.0025) *
+              (0.003 + Math.abs(axCamberDeg) * 0.0012) *
               cap;
             const fyPure =
               -cap * camberLatBonus * handbrakeLatMod * pacejkaMagic(this.alphaLag[i], 8.6 * stiff, 1.24, 0.30, 0.05) +
-              camberThrust * 0.40;
+              camberThrust * 0.18;
 
             // Combined-Slip Friction Ellipse with gentle lateral preservation
             const combined = Math.hypot(fxPure / (cap + 1), fyPure / (cap + 1));
@@ -4495,9 +4513,14 @@ export class VehiclePhysicsEngine {
       let fyLat = accumFyLat / TIRE_SUBSTEPS;
       let yawTorque = accumYawTorque / TIRE_SUBSTEPS;
 
-      // Track slope gravity, smooth C1 hill-climb assist, banking lateral slide & aero drag
-      const straightHoldActive =
-        Math.abs(rawSteerIn) < 0.02 && !handbrakeActive && Math.abs(this.steerAngle) < 0.002 && groundedCount >= 3;
+      // Track slope gravity, smooth C1 hill-climb assist, continuous banking lateral slide & aero drag
+      const steerMagBlend = Math.max(
+        clamp((Math.abs(rawSteerIn) - 0.015) / 0.085, 0, 1),
+        clamp((Math.abs(this.steerAngle) - 0.0015) / 0.014, 0, 1),
+      );
+      const steerSmoothOff = steerMagBlend * steerMagBlend * (3 - 2 * steerMagBlend);
+      const groundSupportFrac = groundedCount >= 3 ? 1.0 : groundedCount === 2 ? 0.45 : 0.0;
+      const straightWeight = handbrakeActive ? 0 : (1.0 - steerSmoothOff) * groundSupportFrac;
       const hillAssistEnabled = assists.hillClimbAssist !== false;
       const gradeU = clamp((slopeFwdY - 0.03) / 0.11, 0, 1);
       const gradeSmooth = gradeU * gradeU * (3 - 2 * gradeU);
@@ -4515,7 +4538,8 @@ export class VehiclePhysicsEngine {
           : 0;
       fxLong -= (speed > 0.1 ? vLong / speed : 0) * aeroDrag;
       fxLong += gravLong + climbAssistN;
-      fyLat -= straightHoldActive ? 0 : bankSlide;
+      // Smooth continuous crown/banking compensation eliminates binary straightHold snap kicks
+      fyLat -= bankSlide * lerp(1.0, 0.2, straightWeight);
 
       // Auto Active Aero: deploy high downforce on corners/braking/steep descents, retract to DRS on fast straights
       if (aeroMode === 'auto' && raceLive) {
@@ -4613,10 +4637,11 @@ export class VehiclePhysicsEngine {
       }
 
       const lowSpeedLatDamp = speed < 1.2 && groundedCount > 0 ? 0.85 : 1.0;
-      const noSkidLatHold =
-        !handbrakeActive && groundedCount >= 3
-          ? Math.exp((straightHoldActive ? -7.5 : -3.6) * dtC)
-          : 1.0;
+      const latHoldRate =
+        handbrakeActive || groundedCount < 2
+          ? 0
+          : lerp(3.8, 7.6, straightWeight) * (groundedCount >= 3 ? 1.0 : 0.5);
+      const noSkidLatHold = latHoldRate > 0 ? Math.exp(-latHoldRate * dtC) : 1.0;
       const nextVLat = (vLat + ay * dtC) * lowSpeedLatDamp * noSkidLatHold;
 
       this.vx = nextVLong * fwdX + nextVLat * leftX;
@@ -4633,8 +4658,9 @@ export class VehiclePhysicsEngine {
         }
       }
 
-      const straightYawDamp =
-        straightHoldActive && Math.abs(this.omega) < 0.22 ? Math.exp(-8.5 * dtC) : 1.0;
+      const omegaMagBlend = 1.0 - clamp((Math.abs(this.omega) - 0.14) / 0.16, 0, 1);
+      const straightYawRate = groundedCount >= 3 ? 8.5 * straightWeight * omegaMagBlend : 0;
+      const straightYawDamp = straightYawRate > 0 ? Math.exp(-straightYawRate * dtC) : 1.0;
       this.omega =
         (this.omega + (yawTorque / spec.yawInertia) * dtC) *
         straightYawDamp *
@@ -4998,6 +5024,11 @@ export class VehiclePhysicsEngine {
       lastAy = ay / 9.81;
       this.lonG = lerp(this.lonG, clamp(lastAx, -2.6, 2.2), 1 - Math.exp(-13.0 * dtC));
       this.latG = lerp(this.latG, clamp(lastAy, -2.8, 2.8), 1 - Math.exp(-13.0 * dtC));
+      this.latGTransferFiltered = lerp(
+        this.latGTransferFiltered,
+        clamp(lastAy, -2.8, 2.8),
+        1 - Math.exp(-8.5 * dtC),
+      );
 
       const arbRollScale = 1.0 / (0.65 + (arbAvg / 6.0) * 0.35);
       const rideHeightOffset = (setup.rideHeightMm - 60) * 0.00065;
@@ -5469,6 +5500,7 @@ export class VehiclePhysicsEngine {
       // If all AI rivals finished the race in Sprint mode, end the match immediately
       if (
         this.raceConfig.mode === 'sprint' &&
+        this.raceConfig.includeAiRivals !== false &&
         this.raceConfig.lapCount > 0 &&
         !this.raceFinished &&
         rivalsInput &&
@@ -5487,9 +5519,10 @@ export class VehiclePhysicsEngine {
     // Live Race Position Calculation
     const playerTotalProgress = this.crossedStartOnce ? this.lap - 1 + progress : progress - 1;
     let racePosition = 1;
-    const totalRacers = this.raceConfig.mode === 'sprint' && rivalsInput ? rivalsInput.length + 1 : 1;
+    const useAiRivals = this.raceConfig.mode === 'sprint' && this.raceConfig.includeAiRivals !== false;
+    const totalRacers = useAiRivals && rivalsInput ? rivalsInput.length + 1 : 1;
     this.rivalListOut.length = 0;
-    if (this.raceConfig.mode === 'sprint' && rivalsInput) {
+    if (useAiRivals && rivalsInput) {
       for (let i = 0; i < rivalsInput.length; i++) {
         const rv = rivalsInput[i];
         const rvFinished = Boolean(rv.finished) || (this.raceConfig.lapCount > 0 && rv.totalProgress >= this.raceConfig.lapCount);
@@ -5514,7 +5547,7 @@ export class VehiclePhysicsEngine {
 
     if (this.raceFinished && !this.finishSummary) {
       const leaderboard: LeaderboardEntry[] = [];
-      if (this.raceConfig.mode === 'sprint' && rivalsInput && rivalsInput.length > 0) {
+      if (useAiRivals && rivalsInput && rivalsInput.length > 0) {
         const playerCompleted = this.playerFinishTimeMs !== null;
         const targetLaps = Math.max(1, this.raceConfig.lapCount);
         const racers = [

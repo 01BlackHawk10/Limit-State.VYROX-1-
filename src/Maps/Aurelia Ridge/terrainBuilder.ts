@@ -491,8 +491,8 @@ export function buildTerrainRig(
   const waterGeo = new THREE.PlaneGeometry(560, 480, waterSegs, waterSegs);
   waterGeo.rotateX(-Math.PI / 2);
 
-  const waterCenterX = 75;
-  const waterCenterZ = 2;
+  const waterCenterX = 65;
+  const waterCenterZ = 4;
   const wPos = waterGeo.attributes.position as THREE.BufferAttribute;
   const waterDepths = new Float32Array(wPos.count);
   for (let i = 0; i < wPos.count; i++) {

@@ -156,6 +156,8 @@ export function isPersistentDbEnabled(): boolean {
   return isPostgresActive() || Boolean(process.env.DATA_DIR) || DATA_DIR === '/var/data';
 }
 
+export { isPostgresActive };
+
 export class AuthAccountError extends Error {
   public readonly code: 'USER_NOT_FOUND' | 'INVALID_PASSWORD';
 
@@ -208,6 +210,37 @@ function sanitizeUserProgress(progress?: Partial<UserProgressData> | null): User
         ? progress.ownedPartsByCar
         : {},
     hudVisibility: { ...base.hudVisibility!, ...(progress.hudVisibility ?? {}) },
+    shadowQuality:
+      typeof progress.shadowQuality === 'string' ? progress.shadowQuality.slice(0, 32) : base.shadowQuality,
+    textureSize:
+      typeof progress.textureSize === 'number' && Number.isFinite(progress.textureSize)
+        ? Math.max(256, Math.min(4096, Math.round(progress.textureSize)))
+        : base.textureSize,
+    renderScale:
+      typeof progress.renderScale === 'number' && Number.isFinite(progress.renderScale)
+        ? Math.max(0.4, Math.min(2.0, progress.renderScale))
+        : base.renderScale,
+    audioMuted: typeof progress.audioMuted === 'boolean' ? progress.audioMuted : base.audioMuted,
+    surfaceAudioEnabled:
+      typeof progress.surfaceAudioEnabled === 'boolean'
+        ? progress.surfaceAudioEnabled
+        : base.surfaceAudioEnabled,
+    cinematicSettings:
+      progress.cinematicSettings && typeof progress.cinematicSettings === 'object'
+        ? progress.cinematicSettings
+        : base.cinematicSettings,
+    preferredWeather:
+      typeof progress.preferredWeather === 'string'
+        ? (progress.preferredWeather as WeatherPresetId)
+        : base.preferredWeather,
+    preferredSolarDeg:
+      typeof progress.preferredSolarDeg === 'number' && Number.isFinite(progress.preferredSolarDeg)
+        ? progress.preferredSolarDeg
+        : base.preferredSolarDeg,
+    preferredRaceConfig:
+      progress.preferredRaceConfig && typeof progress.preferredRaceConfig === 'object'
+        ? progress.preferredRaceConfig
+        : base.preferredRaceConfig,
     stats: { ...base.stats, ...(progress.stats ?? {}) },
     draftMaps: Array.isArray(progress.draftMaps) ? progress.draftMaps : [],
     driverAnalytics:
@@ -308,9 +341,177 @@ export function loginUserAccount(
   const progress = getUserProgress(row.id);
 
   return {
-    user: { id: row.id, username: row.username, createdAt: row.created_at },
+    user: { id: row.id, username: row.username, createdAt: row.created_at, authProvider: 'local' },
     token,
     progress,
+  };
+}
+
+function sanitizeFirebaseHandle(raw: string, uid: string): string {
+  const cleaned = normalizeUsername(raw).replace(/[^a-zA-Z0-9_.-]/g, '');
+  if (cleaned.length >= 3 && /^[a-zA-Z0-9_.-]+$/.test(cleaned)) {
+    return cleaned.slice(0, 24);
+  }
+  const suffix = uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6) || 'driver';
+  const base = (cleaned || 'driver').slice(0, 16);
+  return `${base}_${suffix}`.slice(0, 24);
+}
+
+function resolveUniqueUsername(desired: string, ownerUserId: string): string {
+  const base = sanitizeFirebaseHandle(desired, ownerUserId);
+  let candidate = base;
+  for (let i = 0; i < 12; i++) {
+    const taken = db
+      .prepare('SELECT id FROM users WHERE username_lower = ?')
+      .get(candidate.toLowerCase()) as { id: string } | undefined;
+    if (!taken || taken.id === ownerUserId) {
+      return candidate;
+    }
+    const suffix = i === 0
+      ? ownerUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4) || String(i + 1)
+      : `${ownerUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3)}${i}`;
+    candidate = `${base.slice(0, 24 - suffix.length - 1)}_${suffix}`;
+  }
+  return `driver_${ownerUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10)}`.slice(0, 24);
+}
+
+export function upsertFirebaseUser(params: {
+  firebaseUid: string;
+  email?: string | null;
+  displayName?: string | null;
+  desiredUsername?: string | null;
+  initialProgress?: Partial<UserProgressData> | null;
+}): { user: AuthUser; token: string; progress: UserProgressData } {
+  const uid = String(params.firebaseUid ?? '').trim();
+  if (!uid || uid.length > 128) {
+    throw new Error('Invalid Firebase user ID.');
+  }
+
+  const now = Date.now();
+  const existing = db
+    .prepare('SELECT id, username, created_at FROM users WHERE id = ?')
+    .get(uid) as { id: string; username: string; created_at: number } | undefined;
+
+  if (existing) {
+    db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, existing.id);
+    enqueuePgQuery('UPDATE users SET last_seen_at = $1 WHERE id = $2', [now, existing.id]);
+    const token = issueSessionToken(existing.id);
+    const progress = getUserProgress(existing.id);
+    return {
+      user: {
+        id: existing.id,
+        username: existing.username,
+        createdAt: existing.created_at,
+        email: params.email ?? null,
+        authProvider: 'google',
+      },
+      token,
+      progress,
+    };
+  }
+
+  const seedHandle =
+    params.desiredUsername?.trim() ||
+    params.displayName?.trim() ||
+    (params.email ? params.email.split('@')[0] : '') ||
+    'driver';
+  const username = resolveUniqueUsername(seedHandle, uid);
+  const lower = username.toLowerCase();
+  const passwordHash = `firebase_oauth:${crypto.randomBytes(16).toString('hex')}`;
+  const initialProgress = sanitizeUserProgress(params.initialProgress);
+  const progressJson = JSON.stringify(initialProgress);
+
+  const insertTx = db.transaction(() => {
+    db.prepare(
+      'INSERT INTO users (id, username, username_lower, password_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(uid, username, lower, passwordHash, now, now);
+    db.prepare(
+      'INSERT INTO user_progress (user_id, data_json, updated_at) VALUES (?, ?, ?)',
+    ).run(uid, progressJson, now);
+  });
+  insertTx();
+
+  enqueuePgQuery(
+    `INSERT INTO users (id, username, username_lower, password_hash, created_at, last_seen_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (id) DO NOTHING`,
+    [uid, username, lower, passwordHash, now, now],
+  );
+  enqueuePgQuery(
+    `INSERT INTO user_progress (user_id, data_json, updated_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at`,
+    [uid, progressJson, now],
+  );
+
+  const token = issueSessionToken(uid);
+  return {
+    user: {
+      id: uid,
+      username,
+      createdAt: now,
+      email: params.email ?? null,
+      authProvider: 'google',
+    },
+    token,
+    progress: initialProgress,
+  };
+}
+
+export function updateAccountUsername(userId: string, rawUsername: string): AuthUser {
+  const clean = normalizeUsername(rawUsername);
+  if (clean.length < 3 || clean.length > 24) {
+    throw new Error('Username must be between 3 and 24 characters.');
+  }
+  if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
+    throw new Error('Username may only contain letters, numbers, dots, underscores, and hyphens.');
+  }
+  const lower = clean.toLowerCase();
+
+  const conflict = db
+    .prepare('SELECT id FROM users WHERE username_lower = ? AND id != ?')
+    .get(lower, userId) as { id: string } | undefined;
+  if (conflict) {
+    throw new Error(`"@${clean}" is already taken by another driver.`);
+  }
+
+  const row = db
+    .prepare('SELECT id, created_at, password_hash FROM users WHERE id = ?')
+    .get(userId) as { id: string; created_at: number; password_hash: string } | undefined;
+  if (!row) {
+    throw new Error('Driver account not found.');
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE users SET username = ?, username_lower = ? WHERE id = ?').run(
+      clean,
+      lower,
+      userId,
+    );
+    db.prepare('UPDATE custom_maps SET author_username = ? WHERE author_id = ?').run(clean, userId);
+    db.prepare('UPDATE leaderboard_entries SET username = ? WHERE user_id = ?').run(clean, userId);
+  });
+  tx();
+
+  enqueuePgQuery('UPDATE users SET username = $1, username_lower = $2 WHERE id = $3', [
+    clean,
+    lower,
+    userId,
+  ]);
+  enqueuePgQuery('UPDATE custom_maps SET author_username = $1 WHERE author_id = $2', [
+    clean,
+    userId,
+  ]);
+  enqueuePgQuery('UPDATE leaderboard_entries SET username = $1 WHERE user_id = $2', [
+    clean,
+    userId,
+  ]);
+
+  return {
+    id: row.id,
+    username: clean,
+    createdAt: row.created_at,
+    authProvider: row.password_hash.startsWith('firebase_oauth:') ? 'google' : 'local',
   };
 }
 

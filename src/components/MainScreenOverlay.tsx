@@ -45,10 +45,11 @@ import {
   StintStrategyPreset,
   VEHICLE_SPECS,
 } from '../engine/SceneController';
-import type {
-  AuthUser,
-  CustomMapBlueprint,
-  PartyRoomState,
+import {
+  getPartyModeMeta,
+  type AuthUser,
+  type CustomMapBlueprint,
+  type PartyRoomState,
 } from '../shared/socialTypes';
 import type { DeviceExperienceProfile } from '../utils/deviceExperience';
 import type { MobileSteerMode, MobileVisibilityMode } from './MobileControlsOverlay';
@@ -680,7 +681,10 @@ export function MainScreenOverlay({
             >
               <span>
                 Party {activeParty.code} · {activeParty.members.length} Drivers ·{' '}
-                {activeParty.activityMode}
+                {getPartyModeMeta(activeParty.activityMode).shortLabel}
+                {activeParty.activityMode === 'ai_race'
+                  ? ` (${(activeParty.aiDifficulty ?? 'pro').toUpperCase()})`
+                  : ''}
               </span>
               <span className="text-white underline">Open Lobby</span>
             </button>

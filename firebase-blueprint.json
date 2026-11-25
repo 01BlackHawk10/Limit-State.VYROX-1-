@@ -1,0 +1,454 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Private authenticated user account and PII profile isolated strictly to the account owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_.-]+$"
+        },
+        "usernameLower": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-z0-9_.-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "authProvider": {
+          "type": "string",
+          "enum": ["google", "firebase"]
+        },
+        "createdAt": {
+          "type": "timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "usernameLower",
+        "email",
+        "displayName",
+        "authProvider",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CloudProgress": {
+      "title": "CloudProgress",
+      "description": "Complete cross-device cloud save for car setups, liveries, owned parts, career CR, records, settings, and telemetry analytics.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "selectedCarId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "activeMapId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "driverBio": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "homeCircuitId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "creditsCr": {
+          "type": "integer"
+        },
+        "ownedPartsByCar": {
+          "type": "object"
+        },
+        "carSetups": {
+          "type": "object"
+        },
+        "visualCustomizations": {
+          "type": "object"
+        },
+        "mapCustomizations": {
+          "type": "object"
+        },
+        "bestLaps": {
+          "type": "object"
+        },
+        "bestDrifts": {
+          "type": "object"
+        },
+        "speedTrapRecords": {
+          "type": "object"
+        },
+        "assists": {
+          "type": "object"
+        },
+        "drivingCamera": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "graphicsQuality": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "shadowQuality": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "textureSize": {
+          "type": "integer"
+        },
+        "renderScale": {
+          "type": "number"
+        },
+        "audioVolume": {
+          "type": "number"
+        },
+        "audioMuted": {
+          "type": "boolean"
+        },
+        "surfaceAudioEnabled": {
+          "type": "boolean"
+        },
+        "hudVisibility": {
+          "type": "object"
+        },
+        "cinematicSettings": {
+          "type": "object"
+        },
+        "preferredWeather": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "preferredSolarDeg": {
+          "type": "number"
+        },
+        "preferredRaceConfig": {
+          "type": "object"
+        },
+        "tofuStoryProgress": {
+          "type": "object"
+        },
+        "driverAnalytics": {
+          "type": "object"
+        },
+        "stats": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "selectedCarId",
+        "activeMapId",
+        "driverBio",
+        "homeCircuitId",
+        "creditsCr",
+        "ownedPartsByCar",
+        "carSetups",
+        "visualCustomizations",
+        "mapCustomizations",
+        "bestLaps",
+        "bestDrifts",
+        "speedTrapRecords",
+        "assists",
+        "drivingCamera",
+        "graphicsQuality",
+        "shadowQuality",
+        "textureSize",
+        "renderScale",
+        "audioVolume",
+        "audioMuted",
+        "surfaceAudioEnabled",
+        "hudVisibility",
+        "cinematicSettings",
+        "preferredWeather",
+        "preferredSolarDeg",
+        "preferredRaceConfig",
+        "tofuStoryProgress",
+        "driverAnalytics",
+        "stats",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomMapDoc": {
+      "title": "CustomMapDoc",
+      "description": "Custom track builder blueprint saved in cloud subcollection or published community directory.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUsername": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "isPublished": {
+          "type": "boolean"
+        },
+        "closedLoop": {
+          "type": "boolean"
+        },
+        "templateId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "mapType": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "difficulty": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "baseplateTheme": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "roadSurfaceTheme": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "kerbTheme": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "autoTunnels": {
+          "type": "boolean"
+        },
+        "waterEnabled": {
+          "type": "boolean"
+        },
+        "waterLevel": {
+          "type": "number"
+        },
+        "roadWidth": {
+          "type": "number"
+        },
+        "splineTension": {
+          "type": "number"
+        },
+        "bankingScale": {
+          "type": "number"
+        },
+        "gripScale": {
+          "type": "number"
+        },
+        "kerbHeightScale": {
+          "type": "number"
+        },
+        "asphaltWear": {
+          "type": "number"
+        },
+        "foliageDensity": {
+          "type": "number"
+        },
+        "defaultWeather": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "defaultSolarDeg": {
+          "type": "number"
+        },
+        "defaultHaze": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "controlPoints": {
+          "type": "array"
+        },
+        "terrainStamps": {
+          "type": "array"
+        },
+        "terrainMaterialStamps": {
+          "type": "array"
+        },
+        "placedProps": {
+          "type": "array"
+        },
+        "likesCount": {
+          "type": "integer"
+        },
+        "playsCount": {
+          "type": "integer"
+        },
+        "createdAtMs": {
+          "type": "number"
+        },
+        "updatedAtMs": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "authorId",
+        "authorUsername",
+        "title",
+        "description",
+        "isPublished",
+        "closedLoop",
+        "templateId",
+        "mapType",
+        "difficulty",
+        "baseplateTheme",
+        "roadSurfaceTheme",
+        "kerbTheme",
+        "autoTunnels",
+        "waterEnabled",
+        "waterLevel",
+        "roadWidth",
+        "splineTension",
+        "bankingScale",
+        "gripScale",
+        "kerbHeightScale",
+        "asphaltWear",
+        "foliageDensity",
+        "defaultWeather",
+        "defaultSolarDeg",
+        "defaultHaze",
+        "controlPoints",
+        "terrainStamps",
+        "terrainMaterialStamps",
+        "placedProps",
+        "likesCount",
+        "playsCount",
+        "createdAtMs",
+        "updatedAtMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PublicDriver": {
+      "title": "PublicDriver",
+      "description": "Public non-PII driver showcase summary (never stores email or private credentials).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_.-]+$"
+        },
+        "usernameLower": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-z0-9_.-]+$"
+        },
+        "driverBio": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "homeCircuitId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "selectedCarId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "stats": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "usernameLower",
+        "driverBio",
+        "homeCircuitId",
+        "selectedCarId",
+        "stats",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Private user account documents containing email and handle metadata, readable/writable only by owner."
+    },
+    "/users/{userId}/cloudData/{docId}": {
+      "schema": { "$ref": "#/entities/CloudProgress" },
+      "description": "Owner-only cloud progress snapshot (docId='progress') synced natively across devices."
+    },
+    "/users/{userId}/draftMaps/{mapId}": {
+      "schema": { "$ref": "#/entities/CustomMapDoc" },
+      "description": "Owner-only custom map drafts saved separately to avoid exceeding 1MB document limits."
+    },
+    "/publicDrivers/{userId}": {
+      "schema": { "$ref": "#/entities/PublicDriver" },
+      "description": "Public non-PII driver showcase documents."
+    },
+    "/publicMaps/{mapId}": {
+      "schema": { "$ref": "#/entities/CustomMapDoc" },
+      "description": "Published community custom maps discoverable across devices."
+    }
+  }
+}

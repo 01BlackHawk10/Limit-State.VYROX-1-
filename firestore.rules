@@ -1,0 +1,664 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Shared Hardened Primitives ───────────────────────────────────────────
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDocExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // ── Validation Blueprints (Anti-Update-Gap) ─────────────────────────────
+    function isValidUserAccount(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'usernameLower',
+          'email',
+          'displayName',
+          'authProvider',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'username',
+          'usernameLower',
+          'email',
+          'displayName',
+          'authProvider',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string && data.uid == userId && data.uid == request.auth.uid &&
+        data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+        data.username.matches('^[a-zA-Z0-9_.-]+$') &&
+        data.usernameLower is string && data.usernameLower.size() >= 3 && data.usernameLower.size() <= 24 &&
+        data.usernameLower.matches('^[a-z0-9_.-]+$') &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 0 && data.displayName.size() <= 80 &&
+        data.authProvider in ['google', 'firebase'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPublicDriver(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'usernameLower',
+          'driverBio',
+          'homeCircuitId',
+          'selectedCarId',
+          'stats',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'username',
+          'usernameLower',
+          'driverBio',
+          'homeCircuitId',
+          'selectedCarId',
+          'stats',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string && data.uid == userId && data.uid == request.auth.uid &&
+        data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+        data.username.matches('^[a-zA-Z0-9_.-]+$') &&
+        data.usernameLower is string && data.usernameLower.size() >= 3 && data.usernameLower.size() <= 24 &&
+        data.usernameLower.matches('^[a-z0-9_.-]+$') &&
+        data.driverBio is string && data.driverBio.size() <= 200 &&
+        data.homeCircuitId is string && data.homeCircuitId.size() >= 1 && data.homeCircuitId.size() <= 64 &&
+        data.selectedCarId is string && data.selectedCarId.size() >= 1 && data.selectedCarId.size() <= 64 &&
+        data.stats is map &&
+        data.stats.keys().hasAll(['racesCompleted', 'racesWon', 'totalDistanceKm', 'totalDriftScore']) &&
+        data.stats.racesCompleted is int && data.stats.racesCompleted >= 0 &&
+        data.stats.racesWon is int && data.stats.racesWon >= 0 &&
+        data.stats.totalDistanceKm is number && data.stats.totalDistanceKm >= 0 &&
+        data.stats.totalDriftScore is number && data.stats.totalDriftScore >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCloudProgress(data, userId) {
+      return data.keys().hasAll([
+          'ownerId',
+          'selectedCarId',
+          'activeMapId',
+          'driverBio',
+          'homeCircuitId',
+          'creditsCr',
+          'ownedPartsByCar',
+          'carSetups',
+          'visualCustomizations',
+          'mapCustomizations',
+          'bestLaps',
+          'bestDrifts',
+          'speedTrapRecords',
+          'assists',
+          'drivingCamera',
+          'graphicsQuality',
+          'shadowQuality',
+          'textureSize',
+          'renderScale',
+          'audioVolume',
+          'audioMuted',
+          'surfaceAudioEnabled',
+          'hudVisibility',
+          'cinematicSettings',
+          'preferredWeather',
+          'preferredSolarDeg',
+          'preferredRaceConfig',
+          'tofuStoryProgress',
+          'driverAnalytics',
+          'stats',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId',
+          'selectedCarId',
+          'activeMapId',
+          'driverBio',
+          'homeCircuitId',
+          'creditsCr',
+          'ownedPartsByCar',
+          'carSetups',
+          'visualCustomizations',
+          'mapCustomizations',
+          'bestLaps',
+          'bestDrifts',
+          'speedTrapRecords',
+          'assists',
+          'drivingCamera',
+          'graphicsQuality',
+          'shadowQuality',
+          'textureSize',
+          'renderScale',
+          'audioVolume',
+          'audioMuted',
+          'surfaceAudioEnabled',
+          'hudVisibility',
+          'cinematicSettings',
+          'preferredWeather',
+          'preferredSolarDeg',
+          'preferredRaceConfig',
+          'tofuStoryProgress',
+          'driverAnalytics',
+          'stats',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.ownerId is string && data.ownerId == userId && data.ownerId == request.auth.uid &&
+        data.selectedCarId is string && data.selectedCarId.size() >= 1 && data.selectedCarId.size() <= 64 &&
+        data.activeMapId is string && data.activeMapId.size() >= 1 && data.activeMapId.size() <= 64 &&
+        data.driverBio is string && data.driverBio.size() <= 200 &&
+        data.homeCircuitId is string && data.homeCircuitId.size() >= 1 && data.homeCircuitId.size() <= 64 &&
+        data.creditsCr is int && data.creditsCr >= 0 && data.creditsCr <= 999999999 &&
+        data.ownedPartsByCar is map &&
+        data.carSetups is map &&
+        data.visualCustomizations is map &&
+        data.mapCustomizations is map &&
+        data.bestLaps is map &&
+        data.bestDrifts is map &&
+        data.speedTrapRecords is map &&
+        data.assists is map &&
+        data.drivingCamera is string && data.drivingCamera.size() >= 1 && data.drivingCamera.size() <= 32 &&
+        data.graphicsQuality is string && data.graphicsQuality.size() >= 1 && data.graphicsQuality.size() <= 32 &&
+        data.shadowQuality is string && data.shadowQuality.size() >= 1 && data.shadowQuality.size() <= 32 &&
+        data.textureSize is int && data.textureSize >= 256 && data.textureSize <= 4096 &&
+        data.renderScale is number && data.renderScale >= 0.4 && data.renderScale <= 2.0 &&
+        data.audioVolume is number && data.audioVolume >= 0.0 && data.audioVolume <= 1.0 &&
+        data.audioMuted is bool &&
+        data.surfaceAudioEnabled is bool &&
+        data.hudVisibility is map &&
+        data.cinematicSettings is map &&
+        data.preferredWeather is string && data.preferredWeather.size() >= 1 && data.preferredWeather.size() <= 32 &&
+        data.preferredSolarDeg is number && data.preferredSolarDeg >= 0 && data.preferredSolarDeg <= 360 &&
+        data.preferredRaceConfig is map &&
+        data.tofuStoryProgress is map &&
+        data.driverAnalytics is map &&
+        data.stats is map &&
+        data.stats.keys().hasAll(['racesCompleted', 'racesWon', 'totalDistanceKm', 'totalDriftScore']) &&
+        data.stats.racesCompleted is int && data.stats.racesCompleted >= 0 &&
+        data.stats.racesWon is int && data.stats.racesWon >= 0 &&
+        data.stats.totalDistanceKm is number && data.stats.totalDistanceKm >= 0 &&
+        data.stats.totalDriftScore is number && data.stats.totalDriftScore >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCustomMapDoc(data, mapId, expectedAuthorId) {
+      return data.keys().hasAll([
+          'id',
+          'authorId',
+          'authorUsername',
+          'title',
+          'description',
+          'isPublished',
+          'closedLoop',
+          'templateId',
+          'mapType',
+          'difficulty',
+          'baseplateTheme',
+          'roadSurfaceTheme',
+          'kerbTheme',
+          'autoTunnels',
+          'waterEnabled',
+          'waterLevel',
+          'roadWidth',
+          'splineTension',
+          'bankingScale',
+          'gripScale',
+          'kerbHeightScale',
+          'asphaltWear',
+          'foliageDensity',
+          'defaultWeather',
+          'defaultSolarDeg',
+          'defaultHaze',
+          'controlPoints',
+          'terrainStamps',
+          'terrainMaterialStamps',
+          'placedProps',
+          'likesCount',
+          'playsCount',
+          'createdAtMs',
+          'updatedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'authorId',
+          'authorUsername',
+          'title',
+          'description',
+          'isPublished',
+          'closedLoop',
+          'templateId',
+          'mapType',
+          'difficulty',
+          'baseplateTheme',
+          'roadSurfaceTheme',
+          'kerbTheme',
+          'autoTunnels',
+          'waterEnabled',
+          'waterLevel',
+          'roadWidth',
+          'splineTension',
+          'bankingScale',
+          'gripScale',
+          'kerbHeightScale',
+          'asphaltWear',
+          'foliageDensity',
+          'defaultWeather',
+          'defaultSolarDeg',
+          'defaultHaze',
+          'controlPoints',
+          'terrainStamps',
+          'terrainMaterialStamps',
+          'placedProps',
+          'likesCount',
+          'playsCount',
+          'createdAtMs',
+          'updatedAtMs',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.id is string && data.id == mapId && isValidId(data.id) &&
+        data.authorId is string && data.authorId == expectedAuthorId &&
+        data.authorUsername is string && data.authorUsername.size() >= 3 && data.authorUsername.size() <= 24 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+        data.description is string && data.description.size() <= 500 &&
+        data.isPublished is bool &&
+        data.closedLoop is bool &&
+        data.templateId is string && data.templateId.size() >= 1 && data.templateId.size() <= 64 &&
+        data.mapType is string && data.mapType.size() >= 1 && data.mapType.size() <= 32 &&
+        data.difficulty is string && data.difficulty.size() >= 1 && data.difficulty.size() <= 32 &&
+        data.baseplateTheme is string && data.baseplateTheme.size() >= 1 && data.baseplateTheme.size() <= 32 &&
+        data.roadSurfaceTheme is string && data.roadSurfaceTheme.size() >= 1 && data.roadSurfaceTheme.size() <= 32 &&
+        data.kerbTheme is string && data.kerbTheme.size() >= 1 && data.kerbTheme.size() <= 32 &&
+        data.autoTunnels is bool &&
+        data.waterEnabled is bool &&
+        data.waterLevel is number &&
+        data.roadWidth is number && data.roadWidth >= 4 && data.roadWidth <= 60 &&
+        data.splineTension is number && data.splineTension >= 0 && data.splineTension <= 2 &&
+        data.bankingScale is number && data.bankingScale >= 0 && data.bankingScale <= 3 &&
+        data.gripScale is number && data.gripScale >= 0.2 && data.gripScale <= 2.5 &&
+        data.kerbHeightScale is number && data.kerbHeightScale >= 0 && data.kerbHeightScale <= 3 &&
+        data.asphaltWear is number && data.asphaltWear >= 0 && data.asphaltWear <= 1 &&
+        data.foliageDensity is number && data.foliageDensity >= 0 && data.foliageDensity <= 3 &&
+        data.defaultWeather is string && data.defaultWeather.size() >= 1 && data.defaultWeather.size() <= 32 &&
+        data.defaultSolarDeg is number && data.defaultSolarDeg >= 0 && data.defaultSolarDeg <= 360 &&
+        data.defaultHaze is string && data.defaultHaze.size() >= 1 && data.defaultHaze.size() <= 32 &&
+        data.controlPoints is list && data.controlPoints.size() >= 3 && data.controlPoints.size() <= 400 &&
+        data.controlPoints[0] is map &&
+        data.terrainStamps is list && data.terrainStamps.size() <= 1000 &&
+        (data.terrainStamps.size() == 0 || data.terrainStamps[0] is map) &&
+        data.terrainMaterialStamps is list && data.terrainMaterialStamps.size() <= 1000 &&
+        (data.terrainMaterialStamps.size() == 0 || data.terrainMaterialStamps[0] is map) &&
+        data.placedProps is list && data.placedProps.size() <= 1000 &&
+        (data.placedProps.size() == 0 || data.placedProps[0] is map) &&
+        data.likesCount is int && data.likesCount >= 0 &&
+        data.playsCount is int && data.playsCount >= 0 &&
+        data.createdAtMs is number &&
+        data.updatedAtMs is number &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // ── /users/{userId} (Strict Owner-Only PII Collection) ──────────────────
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isVerifiedEmail() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedEmail() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserAccount(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action: Update driver handle
+          incoming().diff(existing()).affectedKeys().hasOnly(['username', 'usernameLower', 'displayName', 'updatedAt']) ||
+          // Action: Refresh login provider metadata
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'authProvider', 'updatedAt']) ||
+          // Action: Touch activity timestamp
+          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt'])
+        );
+      allow delete: if isVerifiedEmail() && isValidId(userId) && isOwner(userId);
+
+      // ── /users/{userId}/cloudData/{docId} (Master Gate + Action Updates) ──
+      match /cloudData/{docId} {
+        allow get: if isSignedIn() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'progress' &&
+          isOwner(userId) &&
+          userDocExists(userId);
+        allow list: if false;
+        allow create: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'progress' &&
+          isOwner(userId) &&
+          isValidCloudProgress(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          userDocExists(userId);
+        allow update: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'progress' &&
+          isOwner(userId) &&
+          isValidCloudProgress(incoming(), userId) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            // Action: Garage build & credits sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'selectedCarId',
+              'creditsCr',
+              'ownedPartsByCar',
+              'carSetups',
+              'visualCustomizations',
+              'updatedAt'
+            ]) ||
+            // Action: Track records & career analytics sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'activeMapId',
+              'mapCustomizations',
+              'bestLaps',
+              'bestDrifts',
+              'speedTrapRecords',
+              'tofuStoryProgress',
+              'driverAnalytics',
+              'stats',
+              'updatedAt'
+            ]) ||
+            // Action: Driver preferences, assists & profile sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'driverBio',
+              'homeCircuitId',
+              'assists',
+              'drivingCamera',
+              'graphicsQuality',
+              'shadowQuality',
+              'textureSize',
+              'renderScale',
+              'audioVolume',
+              'audioMuted',
+              'surfaceAudioEnabled',
+              'hudVisibility',
+              'cinematicSettings',
+              'preferredWeather',
+              'preferredSolarDeg',
+              'preferredRaceConfig',
+              'updatedAt'
+            ]) ||
+            // Action: Full multi-device progress snapshot sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'selectedCarId',
+              'activeMapId',
+              'driverBio',
+              'homeCircuitId',
+              'creditsCr',
+              'ownedPartsByCar',
+              'carSetups',
+              'visualCustomizations',
+              'mapCustomizations',
+              'bestLaps',
+              'bestDrifts',
+              'speedTrapRecords',
+              'assists',
+              'drivingCamera',
+              'graphicsQuality',
+              'shadowQuality',
+              'textureSize',
+              'renderScale',
+              'audioVolume',
+              'audioMuted',
+              'surfaceAudioEnabled',
+              'hudVisibility',
+              'cinematicSettings',
+              'preferredWeather',
+              'preferredSolarDeg',
+              'preferredRaceConfig',
+              'tofuStoryProgress',
+              'driverAnalytics',
+              'stats',
+              'updatedAt'
+            ])
+          ) &&
+          userDocExists(userId);
+        allow delete: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          docId == 'progress' &&
+          isOwner(userId) &&
+          userDocExists(userId);
+      }
+
+      // ── /users/{userId}/draftMaps/{mapId} ────────────────────────────────
+      match /draftMaps/{mapId} {
+        allow get: if isSignedIn() &&
+          isValidId(userId) &&
+          isValidId(mapId) &&
+          isOwner(userId) &&
+          userDocExists(userId);
+        allow list: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow create: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(mapId) &&
+          isOwner(userId) &&
+          isValidCustomMapDoc(incoming(), mapId, userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          userDocExists(userId);
+        allow update: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(mapId) &&
+          isOwner(userId) &&
+          isValidCustomMapDoc(incoming(), mapId, userId) &&
+          incoming().id == existing().id &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            // Action: Edit draft track geometry, props, or settings
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title',
+              'description',
+              'isPublished',
+              'closedLoop',
+              'templateId',
+              'mapType',
+              'difficulty',
+              'baseplateTheme',
+              'roadSurfaceTheme',
+              'kerbTheme',
+              'autoTunnels',
+              'waterEnabled',
+              'waterLevel',
+              'roadWidth',
+              'splineTension',
+              'bankingScale',
+              'gripScale',
+              'kerbHeightScale',
+              'asphaltWear',
+              'foliageDensity',
+              'defaultWeather',
+              'defaultSolarDeg',
+              'defaultHaze',
+              'controlPoints',
+              'terrainStamps',
+              'terrainMaterialStamps',
+              'placedProps',
+              'authorUsername',
+              'updatedAtMs',
+              'updatedAt'
+            ]) ||
+            // Action: Toggle publish status
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'isPublished',
+              'updatedAtMs',
+              'updatedAt'
+            ])
+          ) &&
+          userDocExists(userId);
+        allow delete: if isVerifiedEmail() &&
+          isValidId(userId) &&
+          isValidId(mapId) &&
+          isOwner(userId) &&
+          userDocExists(userId);
+      }
+    }
+
+    // ── /publicDrivers/{userId} (Non-PII Driver Card) ───────────────────────
+    match /publicDrivers/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if false;
+      allow create: if isVerifiedEmail() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidPublicDriver(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userDocExists(userId);
+      allow update: if isVerifiedEmail() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidPublicDriver(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action: Update identity & bio
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'username',
+            'usernameLower',
+            'driverBio',
+            'homeCircuitId',
+            'updatedAt'
+          ]) ||
+          // Action: Update garage & career stats
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'selectedCarId',
+            'stats',
+            'updatedAt'
+          ])
+        ) &&
+        userDocExists(userId);
+      allow delete: if isVerifiedEmail() && isValidId(userId) && isOwner(userId);
+    }
+
+    // ── /publicMaps/{mapId} (Published Community Maps) ───────────────────────
+    match /publicMaps/{mapId} {
+      allow get: if isSignedIn() && isValidId(mapId) && resource.data.isPublished == true;
+      allow list: if isSignedIn() && resource.data.isPublished == true;
+      allow create: if isVerifiedEmail() &&
+        isValidId(mapId) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().isPublished == true &&
+        isValidCustomMapDoc(incoming(), mapId, request.auth.uid) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userDocExists(request.auth.uid);
+      allow update: if isVerifiedEmail() &&
+        isValidId(mapId) &&
+        isValidCustomMapDoc(incoming(), mapId, existing().authorId) &&
+        incoming().id == existing().id &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          // Action: Author edits published map
+          (
+            incoming().authorId == request.auth.uid &&
+            incoming().isPublished == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title',
+              'description',
+              'closedLoop',
+              'templateId',
+              'mapType',
+              'difficulty',
+              'baseplateTheme',
+              'roadSurfaceTheme',
+              'kerbTheme',
+              'autoTunnels',
+              'waterEnabled',
+              'waterLevel',
+              'roadWidth',
+              'splineTension',
+              'bankingScale',
+              'gripScale',
+              'kerbHeightScale',
+              'asphaltWear',
+              'foliageDensity',
+              'defaultWeather',
+              'defaultSolarDeg',
+              'defaultHaze',
+              'controlPoints',
+              'terrainStamps',
+              'terrainMaterialStamps',
+              'placedProps',
+              'authorUsername',
+              'updatedAtMs',
+              'updatedAt'
+            ])
+          ) ||
+          // Action: Author unpublishes or republishes
+          (
+            incoming().authorId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'isPublished',
+              'updatedAtMs',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerifiedEmail() &&
+        isValidId(mapId) &&
+        resource.data.authorId == request.auth.uid;
+    }
+  }
+}

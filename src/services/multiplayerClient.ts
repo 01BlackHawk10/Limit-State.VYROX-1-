@@ -2,6 +2,7 @@ import type {
   CustomMapBlueprint,
   MultiplayerCarPose,
   PartyActivityMode,
+  PartyAiDifficulty,
   PartyChatMessage,
   PartyCollisionMode,
   PartyInviteNotification,
@@ -30,6 +31,7 @@ export interface CreatePartyPayload {
   name?: string;
   visibility?: PartyVisibility;
   activityMode?: PartyActivityMode;
+  aiDifficulty?: PartyAiDifficulty;
   collisionMode?: PartyCollisionMode;
   mapId?: string;
   customMapId?: string | null;
@@ -46,6 +48,7 @@ export interface UpdatePartySettingsPayload {
   name?: string;
   visibility?: PartyVisibility;
   activityMode?: PartyActivityMode;
+  aiDifficulty?: PartyAiDifficulty;
   collisionMode?: PartyCollisionMode;
   mapId?: string;
   customMapId?: string | null;
@@ -226,6 +229,7 @@ class MultiplayerClient {
     customMapId?: string | null;
     customBlueprint?: CustomMapBlueprint | null;
     activityMode?: PartyActivityMode;
+    aiDifficulty?: PartyAiDifficulty;
     weatherPreset?: WeatherPresetId;
     solarDeg?: number;
     laps?: number;

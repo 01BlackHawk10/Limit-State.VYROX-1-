@@ -330,7 +330,7 @@ export function buildPropsAndFoliageRig(
 
   for (let i = 0; i < N; i += 15) {
     const s = samples[i];
-    const inKarussell = s.position.x > -40 && s.position.x < 240 && s.position.z < -105 && s.position.z > -225;
+    const inKarussell = s.position.x > -145 && s.position.x < 225 && s.position.z < -95 && s.position.z > -215;
     if (!s.isBridge && !s.isStraight && !inKarussell) continue;
 
     const sides = s.isBridge ? ([-1, 1] as const) : ([1] as const);
@@ -866,7 +866,7 @@ export function buildPropsAndFoliageRig(
     const groveDensity = Math.max(0, Math.min(1, 0.54 + groveNoise * 0.62 + microClump * 0.24));
     if (rand() > groveDensity * 0.94) continue;
 
-    const distLake = Math.hypot(rx - 75, rz - 2);
+    const distLake = Math.hypot(rx - 65, rz - 4);
     const distGorge = Math.hypot(rx - 46, rz + 42);
     const waterProx = Math.max(0, 1 - Math.min(distLake / 190, distGorge / 145));
     const moisture = waterProx * Math.max(0, 1 - (ry - WATER_LEVEL) / 42);

@@ -3316,6 +3316,9 @@ export function mountTerrainScene(
   };
   updateAdaptivePostFx(true);
 
+  const isAiRivalsActive = () =>
+    currentRaceConfig.mode === 'sprint' && currentRaceConfig.includeAiRivals !== false;
+
   const syncControlModes = () => {
     const spectating = isSpectatorMode();
     const showingTrackViewport = appMode !== 'garage' || spectating;
@@ -3352,7 +3355,7 @@ export function mountTerrainScene(
       podiumRig.activate();
       cctvRig.setPlayerControlled(true);
       cctvRig.setCarVisible(true);
-      aiRivalsRig.setActive(currentRaceConfig.mode === 'sprint');
+      aiRivalsRig.setActive(isAiRivalsActive());
     } else if (appMode === 'replay') {
       podiumRig.deactivate();
       cctvRig.setPlayerControlled(true);
@@ -3367,7 +3370,7 @@ export function mountTerrainScene(
         appMode === 'racing' || (appMode === 'garage' && spectating),
       );
       aiRivalsRig.setActive(
-        appMode === 'racing' && currentRaceConfig.mode === 'sprint',
+        appMode === 'racing' && isAiRivalsActive(),
       );
     }
 
@@ -5365,7 +5368,7 @@ export function mountTerrainScene(
           interiorViewForPostFx = interiorActive;
           if (!isPaused && !isPhotoFrozenTrack) {
             const pStart = performance.now();
-            if (currentRaceConfig.mode === 'sprint') {
+            if (isAiRivalsActive()) {
               aiRivalsRig.update(
                 delta,
                 lastCountdownSec,
@@ -5482,7 +5485,7 @@ export function mountTerrainScene(
               },
               activeMap === 'frostpeak_pass' ? lastSnowAccumLevel : 0,
             );
-            if (currentRaceConfig.mode === 'sprint') {
+            if (isAiRivalsActive()) {
               const rivalImpacts = physics.consumeRivalImpacts();
               if (rivalImpacts.length > 0) {
                 aiRivalsRig.applyCarImpacts(rivalImpacts);
@@ -5639,7 +5642,7 @@ export function mountTerrainScene(
             if (
               tlm.countdownSec <= 0 &&
               tlm.racePosition < prevRacePosition &&
-              currentRaceConfig.mode === 'sprint'
+              isAiRivalsActive()
             ) {
               overtakePulse = 1.0;
             }
@@ -5686,7 +5689,7 @@ export function mountTerrainScene(
               tlm.speedMps > 20;
 
             let minGapSec: number | null = null;
-            if (currentRaceConfig.mode === 'sprint' && rivalsSnap.length > 0) {
+            if (isAiRivalsActive() && rivalsSnap.length > 0) {
               const effSpd = Math.max(24, tlm.speedMps);
               for (let r = 0; r < rivalsSnap.length; r++) {
                 const rv = rivalsSnap[r];
@@ -6096,11 +6099,11 @@ export function mountTerrainScene(
       physics.setVisualCustomization(getVisualForCar(selectedCarId));
       syncStanceToInstances(garageCarInstance, trackCarInstance);
       physics.resetToGrid(cdMode !== 'instant', currentRaceConfig);
-      if (currentRaceConfig.mode === 'sprint') {
+      if (isAiRivalsActive()) {
         ensureSprintRivalsOnDemand();
       }
       aiRivalsRig.setDifficulty(currentRaceConfig.difficulty ?? 'pro');
-      aiRivalsRig.setActive(currentRaceConfig.mode === 'sprint');
+      aiRivalsRig.setActive(isAiRivalsActive());
       aiRivalsRig.resetGrid();
       prewarmTrackShadersIfNeeded();
       lastCountdownSec = cdMode === 'instant' ? 0 : cdMode === 'quick' ? 1.2 : 3.2;
@@ -6168,7 +6171,7 @@ export function mountTerrainScene(
         carName: raceCarSpec?.name ?? selectedCarId,
         mode: currentRaceConfig.mode,
         weatherPreset: currentWeather,
-        hasRivals: currentRaceConfig.mode === 'sprint',
+        hasRivals: isAiRivalsActive(),
       });
       callbacks.onWeatherTelemetry?.({ ...resetSnap });
       roadRig.setRubberLevel(0.08);

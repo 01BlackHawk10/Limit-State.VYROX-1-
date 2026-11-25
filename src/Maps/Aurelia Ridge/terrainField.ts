@@ -50,18 +50,18 @@ function rawMountainHeight(x: number, z: number): number {
   const rimPeaks = ridgedNoise2D(x * 0.0034 + 2.4, z * 0.0034 - 1.7, 4, 2.1, 0.54, 8821);
   h += rimFactor * (48.0 + rimPeaks * 94.0);
 
-  const dx = x - 75;
-  const dz = z - 2;
-  const cosA = 0.985;
-  const sinA = 0.14;
+  const dx = x - 65;
+  const dz = z - 4;
+  const cosA = 0.998;
+  const sinA = 0.057;
   const lx = dx * cosA - dz * sinA;
   const lz = dx * sinA + dz * cosA;
-  const gorgeDist = Math.hypot(lx / 138, lz / 82);
+  const gorgeDist = Math.hypot(lx / 154, lz / 88);
   const gorgeMask = 1 - smootherstep(0.32, 1.32, gorgeDist);
-  h -= 35.0 * gorgeMask;
+  h -= 37.5 * gorgeMask;
 
   const cliffBackDist = Math.hypot((x - 44) / 22, (z + 67) / 15);
-  const cliffCrestBoost = (1 - smootherstep(0.25, 1.25, cliffBackDist)) * 11.5;
+  const cliffCrestBoost = (1 - smootherstep(0.25, 1.25, cliffBackDist)) * 12.0;
   h += cliffCrestBoost;
 
   const chuteDistX = Math.abs(x - 46 - (z + 48) * 0.1);

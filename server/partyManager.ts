@@ -1,20 +1,46 @@
 import crypto from 'crypto';
 import type { WebSocket, WebSocketServer } from 'ws';
-import type {
-  AuthUser,
-  CustomMapBlueprint,
-  MultiplayerCarPose,
-  PartyActivityMode,
-  PartyChatMessage,
-  PartyCollisionMode,
-  PartyInviteNotification,
-  PartyMemberState,
-  PartyRoomState,
-  PartyRoomSummary,
-  PartyVisibility,
-  WeatherPresetId,
+import {
+  getPartyModeMeta,
+  type AuthUser,
+  type CustomMapBlueprint,
+  type MultiplayerCarPose,
+  type PartyActivityMode,
+  type PartyAiDifficulty,
+  type PartyChatMessage,
+  type PartyCollisionMode,
+  type PartyInviteNotification,
+  type PartyMemberState,
+  type PartyRoomState,
+  type PartyRoomSummary,
+  type PartyVisibility,
+  type WeatherPresetId,
 } from '../src/shared/socialTypes';
 import { getCustomMapById, getFriendIds, getUserByToken, incrementMapPlay } from './db';
+
+const VALID_ACTIVITY_MODES = new Set<PartyActivityMode>([
+  'explore',
+  'race',
+  'ai_race',
+  'drift',
+  'tandem_drift',
+  'time_trial',
+  'endurance',
+]);
+
+const VALID_AI_DIFFICULTIES = new Set<PartyAiDifficulty>(['novice', 'pro', 'elite']);
+
+function parseActivityMode(raw: unknown, fallback: PartyActivityMode = 'race'): PartyActivityMode {
+  return typeof raw === 'string' && VALID_ACTIVITY_MODES.has(raw as PartyActivityMode)
+    ? (raw as PartyActivityMode)
+    : fallback;
+}
+
+function parseAiDifficulty(raw: unknown, fallback: PartyAiDifficulty = 'pro'): PartyAiDifficulty {
+  return typeof raw === 'string' && VALID_AI_DIFFICULTIES.has(raw as PartyAiDifficulty)
+    ? (raw as PartyAiDifficulty)
+    : fallback;
+}
 
 interface ClientConnection {
   ws: WebSocket;
@@ -30,6 +56,7 @@ interface InternalRoom {
   hostUsername: string;
   visibility: PartyVisibility;
   activityMode: PartyActivityMode;
+  aiDifficulty: PartyAiDifficulty;
   collisionMode: PartyCollisionMode;
   mapId: string;
   customMapId: string | null;
@@ -249,6 +276,13 @@ export class PartyManager {
       customBlueprint = getCustomMapById(customMapId, conn.user.id);
     }
 
+    const activityMode = parseActivityMode(payload.activityMode, 'race');
+    const aiDifficulty = parseAiDifficulty(payload.aiDifficulty, 'pro');
+    const defaultLaps = getPartyModeMeta(activityMode).defaultLaps;
+    const rawLaps = typeof payload.laps === 'number' && Number.isFinite(payload.laps)
+      ? Math.max(0, Math.min(999, Math.round(payload.laps)))
+      : defaultLaps;
+
     const room: InternalRoom = {
       id,
       code,
@@ -256,7 +290,8 @@ export class PartyManager {
       hostUserId: conn.user.id,
       hostUsername: conn.user.username,
       visibility: (payload.visibility as PartyVisibility) || 'public',
-      activityMode: (payload.activityMode as PartyActivityMode) || 'race',
+      activityMode,
+      aiDifficulty,
       collisionMode: (payload.collisionMode as PartyCollisionMode) || 'ghost',
       mapId: String(payload.mapId || 'aurelia_ridge'),
       customMapId: customBlueprint?.id ?? customMapId,
@@ -264,7 +299,7 @@ export class PartyManager {
       customBlueprint,
       weatherPreset: (payload.weatherPreset as WeatherPresetId) || 'dry',
       solarDeg: Number(payload.solarDeg ?? 30),
-      laps: Math.max(0, Math.min(999, Math.round(Number(payload.laps ?? 3)) || 0)),
+      laps: rawLaps,
       status: 'lobby',
       countdownEndsAt: 0,
       members: new Map(),
@@ -399,11 +434,19 @@ export class PartyManager {
     const room = this.rooms.get(conn.roomId);
     if (!room || room.hostUserId !== conn.user.id) return;
 
+    const prevMode = room.activityMode;
+    const prevAiDifficulty = room.aiDifficulty;
+
     if (typeof payload.name === 'string' && payload.name.trim()) {
       room.name = payload.name.trim().slice(0, 40);
     }
     if (payload.visibility) room.visibility = payload.visibility as PartyVisibility;
-    if (payload.activityMode) room.activityMode = payload.activityMode as PartyActivityMode;
+    if (payload.activityMode !== undefined) {
+      room.activityMode = parseActivityMode(payload.activityMode, room.activityMode);
+    }
+    if (payload.aiDifficulty !== undefined) {
+      room.aiDifficulty = parseAiDifficulty(payload.aiDifficulty, room.aiDifficulty);
+    }
     if (payload.collisionMode) room.collisionMode = payload.collisionMode as PartyCollisionMode;
     if (typeof payload.mapId === 'string') room.mapId = payload.mapId;
     if (payload.customMapId !== undefined) {
@@ -420,8 +463,30 @@ export class PartyManager {
     }
     if (payload.weatherPreset) room.weatherPreset = payload.weatherPreset as WeatherPresetId;
     if (typeof payload.solarDeg === 'number') room.solarDeg = payload.solarDeg;
-    if (typeof payload.laps === 'number') {
-      room.laps = Math.max(0, Math.min(999, Math.round(payload.laps) || 0));
+    if (typeof payload.laps === 'number' && Number.isFinite(payload.laps)) {
+      room.laps = Math.max(0, Math.min(999, Math.round(payload.laps)));
+    } else if (room.activityMode !== prevMode) {
+      if (room.activityMode === 'explore') {
+        room.laps = 0;
+      } else if (room.activityMode === 'endurance' && (prevMode === 'explore' || room.laps === 0 || room.laps === 3)) {
+        room.laps = 5;
+      } else if ((room.activityMode === 'race' || room.activityMode === 'ai_race') && room.laps === 0) {
+        room.laps = 3;
+      }
+    }
+
+    if (room.activityMode !== prevMode || (room.activityMode === 'ai_race' && room.aiDifficulty !== prevAiDifficulty)) {
+      const modeMeta = getPartyModeMeta(room.activityMode);
+      const aiNote = room.activityMode === 'ai_race' ? ` (${room.aiDifficulty.toUpperCase()} AI)` : '';
+      room.chat.push({
+        id: `sys_${Date.now()}_${Math.random()}`,
+        userId: 'system',
+        username: 'Race Control',
+        text: `Mode switched to ${modeMeta.label}${aiNote}.`,
+        timestamp: Date.now(),
+        isSystem: true,
+      });
+      if (room.chat.length > 50) room.chat.shift();
     }
 
     this.broadcastRoomState(room);
@@ -586,6 +651,7 @@ export class PartyManager {
       roomCode: room.code,
       roomName: room.name,
       activityMode: room.activityMode,
+      aiDifficulty: room.aiDifficulty,
       mapId: room.mapId,
       mapTitle: room.customMapTitle || room.mapId,
       mapType: room.customBlueprint?.mapType,
@@ -618,7 +684,8 @@ export class PartyManager {
       this.createRoom(conn, {
         name: `${conn.user.username} Challenge`,
         visibility: 'friends',
-        activityMode: payload.activityMode ?? 'race',
+        activityMode: parseActivityMode(payload.activityMode, 'race'),
+        aiDifficulty: parseAiDifficulty(payload.aiDifficulty, 'pro'),
         collisionMode: 'ghost',
         mapId: payload.mapId ?? 'aurelia_ridge',
         customMapId: payload.customMapId ?? null,
@@ -642,6 +709,7 @@ export class PartyManager {
       hostUsername: room.hostUsername,
       visibility: room.visibility,
       activityMode: room.activityMode,
+      aiDifficulty: room.aiDifficulty,
       collisionMode: room.collisionMode,
       mapId: room.mapId,
       customMapId: room.customMapId,

@@ -310,6 +310,35 @@ export async function loginWithUsername(
   }
 }
 
+export async function loginWithFirebaseIdToken(
+  idToken: string,
+  username?: string,
+  initialProgress?: Partial<UserProgressData> | null,
+): Promise<AuthSessionResponse> {
+  const data = await apiRequest<AuthSessionResponse>('/api/auth/firebase', {
+    method: 'POST',
+    body: JSON.stringify({
+      idToken,
+      username,
+      progress: initialProgress ?? undefined,
+    }),
+  });
+  setStoredAuthToken(data.token);
+  setLastSignedInUsername(data.user.username);
+  saveLocalProgressVault(data.user.username, data.progress);
+  return data;
+}
+
+export async function updateBackendUsername(username: string): Promise<AuthUser> {
+  const clean = normalizeClientUsername(username);
+  const res = await apiRequest<{ user: AuthUser }>('/api/auth/username', {
+    method: 'PUT',
+    body: JSON.stringify({ username: clean }),
+  });
+  setLastSignedInUsername(res.user.username);
+  return res.user;
+}
+
 export async function logoutAccount(): Promise<void> {
   try {
     await apiRequest('/api/auth/logout', { method: 'POST' });
@@ -480,4 +509,22 @@ export async function updateMyProfileBio(
     method: 'PUT',
     body: JSON.stringify({ driverBio, homeCircuitId }),
   });
+}
+
+export interface CloudHealthStatus {
+  ok: boolean;
+  persistentDb: boolean;
+  postgresActive: boolean;
+  firebaseAuthReady: boolean;
+  timestamp: number;
+}
+
+export async function fetchCloudHealth(): Promise<CloudHealthStatus | null> {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as CloudHealthStatus;
+  } catch {
+    return null;
+  }
 }

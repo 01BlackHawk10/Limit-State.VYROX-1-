@@ -37,19 +37,22 @@ import {
   toggleLikeCustomMap,
 } from '../services/apiClient';
 import { multiplayerClient } from '../services/multiplayerClient';
-import type {
-  AuthUser,
-  CustomMapBlueprint,
-  FriendsOverview,
-  LeaderboardRecord,
-  MapDifficultyTag,
-  MapTypeTag,
-  PartyActivityMode,
-  PartyCollisionMode,
-  PartyRoomState,
-  PartyRoomSummary,
-  PartyVisibility,
-  WeatherPresetId,
+import {
+  getPartyModeMeta,
+  PARTY_ACTIVITY_MODES,
+  type AuthUser,
+  type CustomMapBlueprint,
+  type FriendsOverview,
+  type LeaderboardRecord,
+  type MapDifficultyTag,
+  type MapTypeTag,
+  type PartyActivityMode,
+  type PartyAiDifficulty,
+  type PartyCollisionMode,
+  type PartyRoomState,
+  type PartyRoomSummary,
+  type PartyVisibility,
+  type WeatherPresetId,
 } from '../shared/socialTypes';
 
 export type SocialHubTab = 'parties' | 'explore' | 'leaderboards' | 'friends';
@@ -104,6 +107,7 @@ export function SocialHubModal({
   const [roomName, setRoomName] = useState('');
   const [roomVisibility, setRoomVisibility] = useState<PartyVisibility>('public');
   const [roomActivity, setRoomActivity] = useState<PartyActivityMode>('race');
+  const [roomAiDifficulty, setRoomAiDifficulty] = useState<PartyAiDifficulty>('pro');
   const [roomCollision, setRoomCollision] = useState<PartyCollisionMode>('race_only');
   const [roomMapId, setRoomMapId] = useState<string>('aurelia_ridge');
   const [roomCustomMapId, setRoomCustomMapId] = useState<string>('');
@@ -232,17 +236,19 @@ export function SocialHubModal({
       return;
     }
     const chosenCustom = customMapOptions.find((m) => m.id === roomCustomMapId) ?? null;
+    const modeMeta = getPartyModeMeta(roomActivity);
     multiplayerClient.createParty({
       name: roomName.trim() || `${user.username}'s Room`,
       visibility: roomVisibility,
       activityMode: roomActivity,
+      aiDifficulty: roomAiDifficulty,
       collisionMode: roomCollision,
       mapId: chosenCustom ? 'aurelia_ridge' : roomMapId,
       customMapId: chosenCustom?.id ?? null,
       customMapTitle: chosenCustom?.title ?? null,
       customBlueprint: chosenCustom,
       weatherPreset: roomWeather,
-      laps: roomActivity === 'explore' ? 0 : roomLaps,
+      laps: modeMeta.allowsLaps ? roomLaps : 0,
       carId: selectedCarId,
       paintHex: selectedPaintHex,
     });
@@ -267,14 +273,16 @@ export function SocialHubModal({
       return;
     }
     const chosenCustom = customMapOptions.find((m) => m.id === roomCustomMapId) ?? null;
+    const modeMeta = getPartyModeMeta(roomActivity);
     multiplayerClient.challengeFriend({
       friendUserId,
       mapId: chosenCustom ? 'aurelia_ridge' : roomMapId || 'aurelia_ridge',
       customMapId: chosenCustom?.id ?? null,
       customBlueprint: chosenCustom,
       activityMode: roomActivity,
+      aiDifficulty: roomAiDifficulty,
       weatherPreset: roomWeather,
-      laps: roomActivity === 'explore' ? 0 : roomLaps,
+      laps: modeMeta.allowsLaps ? roomLaps : 0,
       carId: selectedCarId,
       paintHex: selectedPaintHex,
     });
@@ -450,7 +458,12 @@ export function SocialHubModal({
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                           <span>Host: @{activeParty.hostUsername}</span>
                           <span>·</span>
-                          <span className="text-sky-300 uppercase">{activeParty.activityMode}</span>
+                          <span className="text-sky-300 uppercase">
+                            {getPartyModeMeta(activeParty.activityMode).label}
+                            {activeParty.activityMode === 'ai_race'
+                              ? ` (${(activeParty.aiDifficulty ?? 'pro').toUpperCase()} AI)`
+                              : ''}
+                          </span>
                           <span>·</span>
                           <span className="text-amber-300 uppercase">
                             Collisions: {activeParty.collisionMode.replace('_', ' ')}
@@ -488,26 +501,72 @@ export function SocialHubModal({
                           <Crown className="h-3.5 w-3.5" />
                           <span>Host Room Controls</span>
                         </div>
-                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+
+                        <div>
+                          <label className="mb-1.5 block text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                            Party Mode
+                          </label>
+                          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                            {PARTY_ACTIVITY_MODES.map((m) => {
+                              const selected = activeParty.activityMode === m.id;
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() =>
+                                    multiplayerClient.updatePartySettings({
+                                      activityMode: m.id,
+                                    })
+                                  }
+                                  title={m.description}
+                                  className={`border px-2.5 py-2 text-left transition-colors ${
+                                    selected
+                                      ? 'border-sky-400 bg-sky-500/20 text-white'
+                                      : 'border-white/12 bg-black/55 text-slate-300 hover:border-white/30 hover:text-white'
+                                  }`}
+                                >
+                                  <div className="font-display text-[11px] font-bold uppercase leading-tight">
+                                    {m.shortLabel}
+                                  </div>
+                                  <div className="mt-0.5 line-clamp-1 text-[9px] text-slate-400">
+                                    {m.description}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {activeParty.activityMode === 'ai_race' && (
                           <div>
                             <label className="mb-1 block text-[10px] text-slate-400 uppercase">
-                              Activity Mode
+                              AI Rivals Difficulty
                             </label>
-                            <select
-                              value={activeParty.activityMode}
-                              onChange={(e) =>
-                                multiplayerClient.updatePartySettings({
-                                  activityMode: e.target.value as PartyActivityMode,
-                                })
-                              }
-                              className="h-10 sm:h-auto w-full border border-white/15 bg-black/70 px-2.5 py-1.5 text-sm sm:text-xs text-white"
-                            >
-                              <option value="race">Competitive Race</option>
-                              <option value="tandem_drift">Tandem Drift Battle</option>
-                              <option value="explore">Free-Roam Explore</option>
-                            </select>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {(['novice', 'pro', 'elite'] as const).map((diff) => {
+                                const active = (activeParty.aiDifficulty ?? 'pro') === diff;
+                                return (
+                                  <button
+                                    key={diff}
+                                    type="button"
+                                    onClick={() =>
+                                      multiplayerClient.updatePartySettings({ aiDifficulty: diff })
+                                    }
+                                    className={`h-8 border font-display text-[11px] font-bold uppercase ${
+                                      active
+                                        ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                                        : 'border-white/15 bg-black/60 text-slate-300 hover:border-white/30'
+                                    }`}
+                                  >
+                                    {diff}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
+                        )}
 
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                           <div>
                             <label className="mb-1 block text-[10px] text-slate-400 uppercase">
                               Car Collision Mode
@@ -666,8 +725,8 @@ export function SocialHubModal({
                             <Play className="h-3.5 w-3.5 fill-current" />
                             <span>
                               {activeParty.activityMode === 'explore'
-                                ? 'Launch Explore Session'
-                                : 'Start Multiplayer Race'}
+                                ? 'Launch Free Roam Session'
+                                : `Start ${getPartyModeMeta(activeParty.activityMode).shortLabel}`}
                             </span>
                           </button>
                         </div>
@@ -862,7 +921,68 @@ export function SocialHubModal({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="mb-1.5 block text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                        Select Party Mode
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-2">
+                        {PARTY_ACTIVITY_MODES.map((m) => {
+                          const selected = roomActivity === m.id;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setRoomActivity(m.id);
+                                if (!m.allowsLaps) {
+                                  setRoomLaps(0);
+                                } else if (roomLaps === 0 && m.defaultLaps > 0) {
+                                  setRoomLaps(m.defaultLaps);
+                                }
+                              }}
+                              className={`border px-2.5 py-2 text-left transition-colors ${
+                                selected
+                                  ? 'border-sky-400 bg-sky-500/20 text-white'
+                                  : 'border-white/12 bg-black/55 text-slate-300 hover:border-white/30 hover:text-white'
+                              }`}
+                            >
+                              <div className="font-display text-[11px] font-bold uppercase">
+                                {m.label}
+                              </div>
+                              <div className="mt-0.5 text-[10px] leading-snug text-slate-400">
+                                {m.description}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {roomActivity === 'ai_race' && (
+                      <div>
+                        <label className="mb-1 block text-[10px] text-slate-400 uppercase">
+                          AI Rivals Difficulty
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(['novice', 'pro', 'elite'] as const).map((diff) => (
+                            <button
+                              key={diff}
+                              type="button"
+                              onClick={() => setRoomAiDifficulty(diff)}
+                              className={`h-9 border font-display text-[11px] font-bold uppercase ${
+                                roomAiDifficulty === diff
+                                  ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                                  : 'border-white/15 bg-black/60 text-slate-300 hover:border-white/30'
+                              }`}
+                            >
+                              {diff}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
                         <label className="mb-1 block text-[10px] text-slate-400 uppercase">
                           Visibility
@@ -877,23 +997,6 @@ export function SocialHubModal({
                           <option value="private">Private (Code Only)</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] text-slate-400 uppercase">
-                          Mode
-                        </label>
-                        <select
-                          value={roomActivity}
-                          onChange={(e) => setRoomActivity(e.target.value as PartyActivityMode)}
-                          className="h-10 sm:h-auto w-full border border-white/15 bg-black/65 px-2.5 py-2 text-sm sm:text-xs text-white"
-                        >
-                          <option value="race">Multiplayer Race</option>
-                          <option value="tandem_drift">Tandem Drift Battle</option>
-                          <option value="explore">Free-Roam Explore</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
                         <label className="mb-1 block text-[10px] text-slate-400 uppercase">
                           Car Collisions
@@ -965,14 +1068,16 @@ export function SocialHubModal({
                       </div>
                     </div>
 
-                    {roomActivity === 'race' && (
+                    {getPartyModeMeta(roomActivity).allowsLaps && (
                       <div>
                         <label className="mb-1 flex items-center justify-between text-[10px] text-slate-400 uppercase">
-                          <span>Race Laps: {roomLaps}</span>
-                          <span className="font-mono-tabular text-sky-400">?laps={roomLaps}</span>
+                          <span>Laps ({roomLaps === 0 ? 'Unlimited' : roomLaps})</span>
+                          <span className="font-mono-tabular text-sky-400">
+                            ?laps={roomLaps === 0 ? 'unlimited' : roomLaps}
+                          </span>
                         </label>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {[1, 3, 5, 10, 20, 50].map((val) => (
+                          {[1, 3, 5, 10, 20, 0].map((val) => (
                             <button
                               key={val}
                               type="button"
@@ -986,19 +1091,19 @@ export function SocialHubModal({
                                   : 'border-white/15 bg-black/60 text-slate-200 hover:border-white/30'
                               }`}
                             >
-                              {val}L
+                              {val === 0 ? 'Free' : `${val}L`}
                             </button>
                           ))}
                           <input
                             type="number"
-                            min={1}
+                            min={0}
                             max={999}
                             value={roomLaps}
                             aria-label="Custom race lap count"
                             onChange={(e) => {
                               const raw = parseInt(e.target.value, 10);
                               if (!Number.isFinite(raw)) return;
-                              const clamped = Math.max(1, Math.min(999, raw));
+                              const clamped = Math.max(0, Math.min(999, raw));
                               setRoomLaps(clamped);
                               onSyncUrlLaps?.(clamped);
                             }}
@@ -1070,7 +1175,10 @@ export function SocialHubModal({
                                   {room.code}
                                 </span>
                                 <span className="text-[10px] font-bold text-amber-300 uppercase">
-                                  {room.activityMode}
+                                  {getPartyModeMeta(room.activityMode).shortLabel}
+                                  {room.activityMode === 'ai_race'
+                                    ? ` · ${(room.aiDifficulty ?? 'pro').toUpperCase()} AI`
+                                    : ''}
                                 </span>
                               </div>
                               <div className="mt-0.5 text-[11px] text-slate-400">

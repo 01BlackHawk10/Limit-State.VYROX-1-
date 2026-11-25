@@ -1,7 +1,7 @@
 import { Flag, Swords, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MAP_REGISTRY, type MapId } from '../Maps/mapRegistry';
-import type { PartyInviteNotification } from '../shared/socialTypes';
+import { getPartyModeMeta, type PartyInviteNotification } from '../shared/socialTypes';
 
 export interface RaceInviteToastProps {
   invite: PartyInviteNotification | null;
@@ -46,7 +46,15 @@ export function RaceInviteToast({ invite, onAccept, onDismiss }: RaceInviteToast
   const secLeft = Math.ceil(remainingMs / 1000);
   const progressPct = Math.max(0, Math.min(100, (remainingMs / durationMs) * 100));
   const isUrgent = progressPct <= 30;
-  const isChallenge = Boolean(invite.isDirectChallenge || invite.activityMode === 'race');
+  const modeMeta = getPartyModeMeta(invite.activityMode);
+  const isChallenge = Boolean(
+    invite.isDirectChallenge ||
+      invite.activityMode === 'race' ||
+      invite.activityMode === 'ai_race' ||
+      invite.activityMode === 'drift' ||
+      invite.activityMode === 'tandem_drift' ||
+      invite.activityMode === 'endurance',
+  );
 
   return (
     <div
@@ -83,7 +91,7 @@ export function RaceInviteToast({ invite, onAccept, onDismiss }: RaceInviteToast
               </div>
               <p className="mt-0.5 truncate text-xs font-semibold text-white">
                 <span className="text-sky-300">@{invite.fromUsername}</span>{' '}
-                {invite.activityMode === 'race' ? 'challenged you on' : 'invited you to'}{' '}
+                {invite.activityMode === 'explore' ? 'invited you to' : 'challenged you on'}{' '}
                 <span className="text-amber-200">{resolvedMapTitle}</span>
               </p>
             </div>
@@ -101,7 +109,10 @@ export function RaceInviteToast({ invite, onAccept, onDismiss }: RaceInviteToast
 
         <div className="font-mono-tabular mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-slate-400 uppercase">
           <span className="text-slate-200">
-            {invite.activityMode === 'race' ? 'Race' : 'Free-Roam'}
+            {modeMeta.shortLabel}
+            {invite.activityMode === 'ai_race'
+              ? ` · ${(invite.aiDifficulty ?? 'pro').toUpperCase()} AI`
+              : ''}
           </span>
           {invite.mapType && (
             <>

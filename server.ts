@@ -16,6 +16,7 @@ import {
   getUserProgress,
   initDatabase,
   isPersistentDbEnabled,
+  isPostgresActive,
   listExploreMaps,
   listUserMaps,
   loginUserAccount,
@@ -27,9 +28,12 @@ import {
   sendFriendRequest,
   submitLeaderboardEntry,
   toggleMapLike,
+  updateAccountUsername,
   updateUserProfileMeta,
   upsertCustomMap,
+  upsertFirebaseUser,
 } from './server/db';
+import { isFirebaseTokenVerifierReady, verifyFirebaseIdToken } from './server/firebaseAdmin';
 import { PartyManager } from './server/partyManager';
 import type {
   AuthUser,
@@ -221,7 +225,13 @@ async function startServer() {
   });
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, persistentDb: isPersistentDbEnabled(), timestamp: Date.now() });
+    res.json({
+      ok: true,
+      persistentDb: isPersistentDbEnabled(),
+      postgresActive: isPostgresActive(),
+      firebaseAuthReady: isFirebaseTokenVerifierReady(),
+      timestamp: Date.now(),
+    });
   });
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -251,6 +261,51 @@ async function startServer() {
         return;
       }
       res.status(401).json({ error: err instanceof Error ? err.message : 'Login failed.' });
+    }
+  });
+
+  app.post('/api/auth/firebase', async (req, res) => {
+    if (!isFirebaseTokenVerifierReady()) {
+      res.status(503).json({ error: 'Cloud authentication is not configured.' });
+      return;
+    }
+    try {
+      const { idToken, username, progress } = (req.body ?? {}) as {
+        idToken?: string;
+        username?: string;
+        progress?: Partial<UserProgressData>;
+      };
+      const decoded = await verifyFirebaseIdToken(String(idToken ?? ''));
+      if (decoded.email && decoded.email_verified === false) {
+        res.status(400).json({ error: 'Please verify your Google email before signing in.' });
+        return;
+      }
+      const result = upsertFirebaseUser({
+        firebaseUid: decoded.uid,
+        email: decoded.email ?? null,
+        displayName: typeof decoded.name === 'string' ? decoded.name : null,
+        desiredUsername: typeof username === 'string' ? username : null,
+        initialProgress: progress ?? null,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(401).json({
+        error: err instanceof Error ? err.message : 'Firebase token verification failed.',
+      });
+    }
+  });
+
+  app.put('/api/auth/username', (req, res) => {
+    const user = requireUser(req, res);
+    if (!user) return;
+    try {
+      const { username } = (req.body ?? {}) as { username?: unknown };
+      const updated = updateAccountUsername(user.id, String(username ?? ''));
+      res.json({ user: updated });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : 'Failed to update driver handle.',
+      });
     }
   });
 

@@ -118,40 +118,42 @@ export const SHOULDER_WIDTH = 2.8;
 export const WATER_LEVEL = -4.0;
 
 /**
- * Editable corner control point indices (keeps Pit Straight 0..2 and Suspension Bridge 5..7 anchored).
+ * Editable corner control point indices (keeps Pit Straight 0..2 and Suspension Bridge 6..8 anchored).
  */
 export const EDITABLE_WAYPOINT_INDICES: ReadonlyArray<{ index: number; label: string }> = [
-  { index: 3, label: 'T1 Compression Dip' },
-  { index: 4, label: 'T2 Blind Crest' },
-  { index: 8, label: 'T4 West Canyon' },
-  { index: 10, label: 'T6 Karussell Apex' },
-  { index: 12, label: 'T8 North Summit' },
-  { index: 13, label: 'T9 Canyon Esses L' },
-  { index: 14, label: 'T10 Canyon Esses R' },
-  { index: 16, label: 'T12 West Straight' },
-  { index: 17, label: 'T13 Final Chicane' },
+  { index: 3, label: 'T1 Castlevania Sweep' },
+  { index: 4, label: 'T2 East Valley Climb' },
+  { index: 9, label: 'T4 West Gorge Sweep' },
+  { index: 11, label: 'T6 Grand Karussell Bowl' },
+  { index: 13, label: 'T8 East Ridge Hairpin' },
+  { index: 14, label: 'T9 Summit Arch Crest' },
+  { index: 16, label: 'T11 Canyon Esses R' },
+  { index: 18, label: 'T13 West Backstraight' },
+  { index: 19, label: 'T14 Final Chicane' },
 ];
 
 const BASE_CONTROL_POINTS: Array<[number, number, number]> = [
-  [-215, 20.0, 240], // 0: Pit Straight West Entry
+  [-235, 20.0, 240], // 0: Pit Straight West Entry
   [-25, 20.0, 240], // 1: Start / Finish Gantry
-  [165, 20.0, 240], // 2: End of Pit Straight
-  [275, 12.2, 195], // 3: Downhill Compression Dip
-  [305, 24.5, 92], // 4: Blind Uphill Crest Sweeper
-  [218, 21.8, 22], // 5: Cable-Stayed Bridge East Abutment
-  [75, 22.4, 2], // 6: Cable-Stayed Bridge Center Span
-  [-68, 22.8, -18], // 7: Cable-Stayed Bridge West Abutment
-  [-138, 26.5, -96], // 8: West Canyon Bend
-  [-32, 34.5, -158], // 9: Karussell Banked Bowl Entry
-  [135, 37.5, -135], // 10: Karussell 180° Banked Bowl Apex
-  [245, 42.5, -212], // 11: Karussell Exit Climb
-  [152, 48.0, -295], // 12: North Summit Crest
-  [8, 40.0, -248], // 13: Canyon Esses Left
-  [-128, 34.5, -294], // 14: Canyon Esses Right
-  [-276, 29.0, -224], // 15: North-West Ridge Sweeper
-  [-325, 24.5, -52], // 16: Blistering West Backstraight
-  [-310, 21.0, 125], // 17: Final Chicane Approach
-  [-270, 20.0, 195], // 18: Final Hairpin onto Pit Straight
+  [185, 20.0, 240], // 2: End of Pit Straight / Heavy Braking Zone
+  [315, 16.5, 215], // 3: T1 Castlevania Fast Downhill Sweeper
+  [370, 20.5, 108], // 4: T2 East Valley Climbing Sweeper
+  [298, 25.0, 18], // 5: T3 Gorge Bridge East Approach
+  [205, 25.5, 12], // 6: Cable-Stayed Bridge East Abutment
+  [65, 26.2, 4], // 7: Cable-Stayed Bridge Center Span
+  [-75, 25.5, -4], // 8: Cable-Stayed Bridge West Abutment
+  [-182, 27.5, -48], // 9: T4 West Gorge Cliff Sweeper
+  [-135, 34.0, -162], // 10: T5 Grand Karussell Horseshoe Entry
+  [35, 39.5, -138], // 11: T6 Grand Karussell Panorama Bowl Apex
+  [215, 43.0, -185], // 12: T7 Karussell Exit Climb
+  [285, 48.5, -285], // 13: T8 East Ridge Overlook Hairpin
+  [135, 51.0, -345], // 14: T9 North Summit Arch Straight (51m Crest)
+  [-35, 45.5, -285], // 15: T10 Summit Esses Left
+  [-175, 39.5, -340], // 16: T11 Canyon Esses Right
+  [-335, 32.0, -245], // 17: T12 West Cliff Hairpin
+  [-365, 24.5, -45], // 18: T13 Blistering West Backstraight
+  [-345, 20.8, 145], // 19: T14 Stadium Chicane & Final Approach
+  [-295, 20.0, 218], // 20: Final Corner onto Pit Straight
 ];
 
 export const CORAL_BAY_CONTROL_POINTS: Array<[number, number, number]> = [
@@ -201,35 +203,36 @@ const AURELIA_PRESET_DELTAS: Record<
 > = {
   original: {},
   technical_chicanes: {
-    3: [-25, -1.5, -10],
-    4: [22, 1.5, 14],
-    10: [12, -1.5, 28],
-    13: [18, 0, -28],
-    14: [-22, 0, 24],
-    16: [48, 0, 0],
-    17: [-32, 0, -14],
+    3: [-24, -1.0, -14],
+    4: [20, 1.5, 12],
+    9: [-18, 0, -14],
+    11: [10, -1.0, 24],
+    15: [20, 0, -24],
+    16: [-20, 0, 24],
+    18: [42, 0, 0],
+    19: [-26, 0, -16],
   },
   high_speed: {
-    3: [25, 1.0, 8],
-    4: [18, -1.0, -12],
-    8: [-18, 0, 14],
-    10: [-22, 0, -24],
-    12: [0, -2.0, -22],
-    13: [-14, 0, -26],
-    14: [14, 0, 18],
-    16: [-20, 0, 0],
-    17: [-12, 0, 14],
+    3: [24, 1.0, 10],
+    4: [16, -1.0, -10],
+    9: [-16, 0, 14],
+    11: [-20, 0, -22],
+    14: [0, -1.5, -20],
+    15: [-14, 0, -22],
+    16: [16, 0, 16],
+    18: [-22, 0, 0],
+    19: [-12, 0, 14],
   },
   drift_canyon: {
-    3: [16, 0, 20],
-    8: [-28, 0, -12],
-    9: [-16, 0, 18],
-    10: [24, 1.5, 26],
-    11: [20, 0, -18],
-    13: [26, 0, -32],
-    14: [-24, 0, 30],
-    16: [28, 0, -10],
-    17: [-28, 0, -20],
+    3: [18, 0, 18],
+    9: [-24, 0, -12],
+    10: [-14, 0, 16],
+    11: [22, 1.0, 24],
+    13: [18, 0, -16],
+    15: [24, 0, -28],
+    16: [-22, 0, 26],
+    18: [24, 0, -10],
+    19: [-24, 0, -18],
   },
 };
 
@@ -414,12 +417,12 @@ interface MapSplineDescriptor {
 const MAP_SPLINE_DESCRIPTORS: Record<MapId, MapSplineDescriptor> = {
   aurelia_ridge: {
     controlPoints: BASE_CONTROL_POINTS,
-    lockedIndices: new Set([0, 1, 2, 5, 6, 7]),
+    lockedIndices: new Set([0, 1, 2, 6, 7, 8]),
     closedLoop: true,
     sfHub: { x: -25, z: 240 },
-    bridgeHub: { x: 75, z: 2 },
+    bridgeHub: { x: 65, z: 4 },
     bridgeHalfSamples: 138,
-    straightHalfMeters: 175,
+    straightHalfMeters: 165,
     editableWaypoints: EDITABLE_WAYPOINT_INDICES,
     presetDeltas: AURELIA_PRESET_DELTAS,
     minYClamp: -2.0,
@@ -1009,6 +1012,99 @@ export function rebuildCircuitData(
   }
 
   const worldUp = new THREE.Vector3(0, 1, 0);
+  const smoothstep01 = (e0: number, e1: number, v: number) => {
+    const u = clamp((v - e0) / Math.max(1e-5, e1 - e0), 0, 1);
+    return u * u * (3 - 2 * u);
+  };
+
+  // Precompute structural flags & C2-smooth banking envelopes so transitions onto bridges, tunnels & straights never step-jump
+  const isBridgeArr = new Uint8Array(SAMPLE_COUNT);
+  const isTunnelArr = new Uint8Array(SAMPLE_COUNT);
+  const isStraightArr = new Uint8Array(SAMPLE_COUNT);
+  const deckFlatEnvelope = new Float32Array(SAMPLE_COUNT);
+  const rawBankAngles = new Float32Array(SAMPLE_COUNT);
+
+  for (let i = 0; i < SAMPLE_COUNT; i++) {
+    const t = isClosed ? i / SAMPLE_COUNT : i / (SAMPLE_COUNT - 1);
+    const pos = rawPositions[i];
+    const isBridge = isTinRange(t, bridgeStartT, bridgeEndT) || autoBridgeFlags[i] === 1;
+    const isTunnel = !isBridge && autoTunnelFlags[i] === 1;
+    const isStraight = isTinRange(t, straightStartT, straightEndT);
+    isBridgeArr[i] = isBridge ? 1 : 0;
+    isTunnelArr[i] = isTunnel ? 1 : 0;
+    isStraightArr[i] = isStraight ? 1 : 0;
+    deckFlatEnvelope[i] = isBridge || isTunnel || isStraight ? 0.0 : 1.0;
+
+    const curv = smoothCurvature[i];
+    let karussellWeight = 0;
+    if (!customBp && activeMapId === 'aurelia_ridge') {
+      const kDistSq = Math.pow((pos.x - 35) / 148, 2) + Math.pow((pos.z + 148) / 56, 2);
+      karussellWeight = Math.exp(-kDistSq * 1.35);
+    }
+    const highCurvBlend = smoothstep01(0.0082, 0.0145, Math.abs(curv));
+    const bankGain =
+      (6.8 + (8.2 - 6.8) * highCurvBlend + (12.0 - 6.8) * karussellWeight) * effBankingScale;
+    const maxBank =
+      (0.145 + (0.215 - 0.145) * karussellWeight) * Math.max(0.75, effBankingScale);
+
+    let extraCornerBank = 0;
+    for (let b = 0; b < waypointBankTargets.length; b++) {
+      const target = waypointBankTargets[b];
+      let dt = Math.abs(t - target.t);
+      if (isClosed && dt > 0.5) dt = 1 - dt;
+      if (dt < 0.075) {
+        const w = Math.exp(-Math.pow(dt / 0.028, 2));
+        const sign = curv >= 0 ? -1 : 1;
+        extraCornerBank += sign * target.rad * w;
+      }
+    }
+
+    const baseBank = -clamp(curv * bankGain, -maxBank, maxBank);
+    rawBankAngles[i] = clamp(baseBank + extraCornerBank, -0.34, 0.34) * deckFlatEnvelope[i];
+  }
+
+  // Multi-pass cyclic 5-tap Gaussian filter over bankAngle + smooth deck boundary ramp (eliminates sudden lateral kicks)
+  let bankBufA = new Float32Array(rawBankAngles);
+  let bankBufB = new Float32Array(SAMPLE_COUNT);
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 0; i < SAMPLE_COUNT; i++) {
+      const iM2 = isClosed ? (i - 2 + SAMPLE_COUNT) % SAMPLE_COUNT : Math.max(0, i - 2);
+      const iM1 = isClosed ? (i - 1 + SAMPLE_COUNT) % SAMPLE_COUNT : Math.max(0, i - 1);
+      const iP1 = isClosed ? (i + 1) % SAMPLE_COUNT : Math.min(SAMPLE_COUNT - 1, i + 1);
+      const iP2 = isClosed ? (i + 2) % SAMPLE_COUNT : Math.min(SAMPLE_COUNT - 1, i + 2);
+      bankBufB[i] =
+        bankBufA[iM2] * 0.12 +
+        bankBufA[iM1] * 0.22 +
+        bankBufA[i] * 0.32 +
+        bankBufA[iP1] * 0.22 +
+        bankBufA[iP2] * 0.12;
+    }
+    const tmp = bankBufA;
+    bankBufA = bankBufB;
+    bankBufB = tmp;
+  }
+
+  // Keep bridge & tunnel decks strictly level inside their span, ramping smoothly over 10 samples at portals/abutments
+  for (let i = 0; i < SAMPLE_COUNT; i++) {
+    if (isBridgeArr[i] === 1 || isTunnelArr[i] === 1) {
+      bankBufA[i] = 0;
+    }
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < SAMPLE_COUNT; i++) {
+      if (isBridgeArr[i] === 1 || isTunnelArr[i] === 1) {
+        bankBufB[i] = 0;
+        continue;
+      }
+      const iM1 = isClosed ? (i - 1 + SAMPLE_COUNT) % SAMPLE_COUNT : Math.max(0, i - 1);
+      const iP1 = isClosed ? (i + 1) % SAMPLE_COUNT : Math.min(SAMPLE_COUNT - 1, i + 1);
+      bankBufB[i] = bankBufA[iM1] * 0.25 + bankBufA[i] * 0.5 + bankBufA[iP1] * 0.25;
+    }
+    const tmp = bankBufA;
+    bankBufA = bankBufB;
+    bankBufB = tmp;
+  }
+
   const samples: CircuitSample[] = [];
   let minElevation = Infinity;
   let maxElevation = -Infinity;
@@ -1018,41 +1114,11 @@ export function rebuildCircuitData(
     const pos = rawPositions[i];
     const tangent = rawTangents[i];
     const flatRight = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
-    const isBridge = isTinRange(t, bridgeStartT, bridgeEndT) || autoBridgeFlags[i] === 1;
-    const isTunnel = !isBridge && autoTunnelFlags[i] === 1;
-    const isStraight = isTinRange(t, straightStartT, straightEndT);
-
-    // Progressive banking: scaled by user's banking customization + per-corner custom banking
+    const isBridge = isBridgeArr[i] === 1;
+    const isTunnel = isTunnelArr[i] === 1;
+    const isStraight = isStraightArr[i] === 1;
     const curv = smoothCurvature[i];
-    const inKarussell =
-      !customBp &&
-      activeMapId === 'aurelia_ridge' &&
-      pos.x > -45 &&
-      pos.x < 245 &&
-      pos.z < -105 &&
-      pos.z > -225;
-    const highCurvBankBoost = Math.abs(curv) > 0.011 && !isStraight && !isBridge;
-    const bankGain = (inKarussell ? 12.0 : highCurvBankBoost ? 8.2 : 6.8) * effBankingScale;
-    const maxBank = (inKarussell ? 0.22 : 0.145) * Math.max(0.75, effBankingScale);
-    const bridgeFade = isBridge || isTunnel ? 0.0 : 1.0;
-    const straightFade = isStraight ? 0.0 : 1.0;
-
-    let extraCornerBank = 0;
-    for (let b = 0; b < waypointBankTargets.length; b++) {
-      const target = waypointBankTargets[b];
-      let dt = Math.abs(t - target.t);
-      if (isClosed && dt > 0.5) dt = 1 - dt;
-      if (dt < 0.075) {
-        const w = Math.exp(-Math.pow(dt / 0.028, 2));
-        // Positive user banking tilts inside of turn downward
-        const sign = curv >= 0 ? -1 : 1;
-        extraCornerBank += sign * target.rad * w;
-      }
-    }
-
-    const baseBank = -clamp(curv * bankGain, -maxBank, maxBank);
-    const bankAngle =
-      clamp(baseBank + extraCornerBank, -0.34, 0.34) * bridgeFade * straightFade;
+    const bankAngle = bankBufA[i];
 
     const right = flatRight.clone().applyAxisAngle(tangent, bankAngle).normalize();
     const up = new THREE.Vector3().crossVectors(right, tangent).normalize();

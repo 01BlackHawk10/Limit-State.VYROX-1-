@@ -53,6 +53,7 @@ import {
 import {
   type CustomMapBlueprint,
   DEFAULT_HUD_VISIBILITY,
+  getPartyModeMeta,
   type HudVisibilityConfig,
   type PartyCollisionMode,
   type PartyRoomState,
@@ -2377,7 +2378,10 @@ export const Gt7DrivingHud = memo(function Gt7DrivingHud({
               <div className="flex items-center gap-1.5 font-display text-xs font-bold text-white uppercase">
                 <Users className="h-4 w-4 text-emerald-400" />
                 <span>
-                  Party {activeParty.code} · {activeParty.activityMode.toUpperCase()}
+                  Party {activeParty.code} · {getPartyModeMeta(activeParty.activityMode).shortLabel.toUpperCase()}
+                  {activeParty.activityMode === 'ai_race'
+                    ? ` (${(activeParty.aiDifficulty ?? 'pro').toUpperCase()})`
+                    : ''}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -2457,7 +2461,10 @@ export const Gt7DrivingHud = memo(function Gt7DrivingHud({
               <div className="flex items-center gap-1.5 font-display font-bold text-white uppercase">
                 <Users className="h-3.5 w-3.5 text-emerald-400" />
                 <span>
-                  Party {activeParty.code} · {activeParty.activityMode.toUpperCase()}
+                  Party {activeParty.code} · {getPartyModeMeta(activeParty.activityMode).shortLabel.toUpperCase()}
+                  {activeParty.activityMode === 'ai_race'
+                    ? ` (${(activeParty.aiDifficulty ?? 'pro').toUpperCase()})`
+                    : ''}
                 </span>
               </div>
               {onLeaveParty && (

@@ -206,13 +206,13 @@ export interface AuthoredCornerDef {
 
 const AUTHORED_CORNERS_BY_MAP: Record<MapId, AuthoredCornerDef[]> = {
   aurelia_ridge: [
-    { cornerId: 'T1', name: 'Compression Dip', sector: 1, startProg: 0.08, entryEndProg: 0.11, apexEndProg: 0.15, endProg: 0.19 },
-    { cornerId: 'T2', name: 'Blind Crest Sweeper', sector: 1, startProg: 0.19, entryEndProg: 0.22, apexEndProg: 0.26, endProg: 0.30 },
-    { cornerId: 'T3', name: 'West Canyon Bend', sector: 2, startProg: 0.39, entryEndProg: 0.42, apexEndProg: 0.46, endProg: 0.50 },
-    { cornerId: 'T4', name: 'Karussell Banked Bowl', sector: 2, startProg: 0.51, entryEndProg: 0.55, apexEndProg: 0.61, endProg: 0.66 },
-    { cornerId: 'T5', name: 'North Summit Crest', sector: 3, startProg: 0.67, entryEndProg: 0.70, apexEndProg: 0.74, endProg: 0.78 },
-    { cornerId: 'T6', name: 'Canyon Esses', sector: 3, startProg: 0.78, entryEndProg: 0.81, apexEndProg: 0.85, endProg: 0.89 },
-    { cornerId: 'T7', name: 'Final Hairpin', sector: 3, startProg: 0.90, entryEndProg: 0.93, apexEndProg: 0.96, endProg: 0.99 },
+    { cornerId: 'T1', name: 'Castlevania Sweeper', sector: 1, startProg: 0.08, entryEndProg: 0.11, apexEndProg: 0.15, endProg: 0.19 },
+    { cornerId: 'T2', name: 'East Valley Climb', sector: 1, startProg: 0.19, entryEndProg: 0.22, apexEndProg: 0.26, endProg: 0.30 },
+    { cornerId: 'T4', name: 'West Gorge Sweep', sector: 2, startProg: 0.40, entryEndProg: 0.43, apexEndProg: 0.47, endProg: 0.51 },
+    { cornerId: 'T6', name: 'Grand Karussell Bowl', sector: 2, startProg: 0.52, entryEndProg: 0.56, apexEndProg: 0.61, endProg: 0.66 },
+    { cornerId: 'T8', name: 'East Ridge Hairpin', sector: 2, startProg: 0.66, entryEndProg: 0.69, apexEndProg: 0.72, endProg: 0.75 },
+    { cornerId: 'T10', name: 'Canyon Esses', sector: 3, startProg: 0.77, entryEndProg: 0.80, apexEndProg: 0.84, endProg: 0.88 },
+    { cornerId: 'T14', name: 'Final Stadium Chicane', sector: 3, startProg: 0.90, entryEndProg: 0.93, apexEndProg: 0.96, endProg: 0.99 },
   ],
   coral_bay: [
     { cornerId: 'T1', name: 'Palm Beach Sweeper', sector: 1, startProg: 0.07, entryEndProg: 0.10, apexEndProg: 0.14, endProg: 0.18 },

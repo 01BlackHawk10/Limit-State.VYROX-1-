@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { Camera, ChevronLeft, ChevronRight, Eye, EyeOff, Home, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { auth } from './lib/firebase';
 import { AuthModal } from './components/AuthModal';
 import { CarSelectModal } from './components/CarSelectModal';
 import { EngineeringLabModal, type LiveRubberSample } from './components/EngineeringLabModal';
@@ -131,12 +133,15 @@ import {
 } from './Maps/Aurelia Ridge/skyAndLighting';
 import { InspectMode } from './Maps/Aurelia Ridge/terrainBuilder';
 import {
+  type CloudHealthStatus,
   deleteCustomMapById,
+  fetchCloudHealth,
   fetchCurrentUser,
   fetchMyMaps,
   getLastSignedInUsername,
   getStoredAuthToken,
   loadLocalProgressVault,
+  loginWithFirebaseIdToken,
   loginWithUsername,
   logoutAccount,
   saveLocalProgressVault,
@@ -144,7 +149,18 @@ import {
   saveUserProgressCloud,
   signupWithUsername,
   submitLeaderboardRecord,
+  updateBackendUsername,
 } from './services/apiClient';
+import {
+  deleteCloudCustomMap,
+  ensureFirebaseUserAccount,
+  loadCloudUserData,
+  saveCloudCustomMap,
+  saveCloudProgress,
+  signInWithGoogleCloud,
+  signOutGoogleCloud,
+  updateCloudUsername,
+} from './services/cloudSync';
 import { multiplayerClient } from './services/multiplayerClient';
 import { ALL_ACTIVE_CAR_IDS } from './shared/carTypes';
 import {
@@ -728,6 +744,21 @@ function mergeProgressSnapshots(
     tofuStoryProgress: mergeTofuStoryProgress(primary.tofuStoryProgress, fallback.tofuStoryProgress),
     driverBio: primary.driverBio?.trim() ? primary.driverBio : (fallback.driverBio ?? ''),
     homeCircuitId: primary.homeCircuitId || fallback.homeCircuitId || 'aurelia_ridge',
+    shadowQuality: primary.shadowQuality ?? fallback.shadowQuality,
+    textureSize: primary.textureSize ?? fallback.textureSize,
+    renderScale: primary.renderScale ?? fallback.renderScale,
+    audioMuted: primary.audioMuted ?? fallback.audioMuted,
+    surfaceAudioEnabled: primary.surfaceAudioEnabled ?? fallback.surfaceAudioEnabled,
+    cinematicSettings: {
+      ...(fallback.cinematicSettings ?? {}),
+      ...(primary.cinematicSettings ?? {}),
+    },
+    preferredWeather: primary.preferredWeather ?? fallback.preferredWeather,
+    preferredSolarDeg: primary.preferredSolarDeg ?? fallback.preferredSolarDeg,
+    preferredRaceConfig: {
+      ...(fallback.preferredRaceConfig ?? {}),
+      ...(primary.preferredRaceConfig ?? {}),
+    },
     driverAnalytics: mergeDriverAnalytics(primary.driverAnalytics, fallback.driverAnalytics),
     stats: {
       racesCompleted: Math.max(primary.stats?.racesCompleted ?? 0, fallback.stats?.racesCompleted ?? 0),
@@ -1068,6 +1099,7 @@ export default function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authChecking, setAuthChecking] = useState<boolean>(() => Boolean(getStoredAuthToken()));
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [cloudHealth, setCloudHealth] = useState<CloudHealthStatus | null>(null);
   const [headlightsOn, setHeadlightsOn] = useState(false);
   const [socialHubOpen, setSocialHubOpen] = useState(false);
   const [socialHubTab, setSocialHubTab] = useState<SocialHubTab>('parties');
@@ -1125,8 +1157,22 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCloudHealth().then((status) => {
+      if (!cancelled && status) {
+        setCloudHealth(status);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authModalOpen, authUser]);
+
   const authUserRef = useRef<AuthUser | null>(null);
   authUserRef.current = authUser;
+  const firebaseUserRef = useRef<FirebaseUser | null>(null);
+  const syncingFirebaseUidRef = useRef<string | null>(null);
   const activePartyRef = useRef<PartyRoomState | null>(null);
   activePartyRef.current = activeParty;
   const activeCustomBlueprintRef = useRef<CustomMapBlueprint | null>(null);
@@ -2644,6 +2690,14 @@ export default function App() {
       let finalSaved = stamped;
       if (authUser) {
         finalSaved = await saveOrPublishCustomMap(stamped, stamped.isPublished);
+        if (firebaseUserRef.current) {
+          await saveCloudCustomMap(
+            firebaseUserRef.current.uid,
+            authUser.username,
+            finalSaved,
+            finalSaved.isPublished,
+          ).catch(() => {});
+        }
       }
       builderDraftBlueprintRef.current = finalSaved;
       setBuilderDraftBlueprint(finalSaved);
@@ -2656,7 +2710,11 @@ export default function App() {
           finalSaved,
           ...snapshot.draftMaps.filter((m) => m.id !== finalSaved.id),
         ].slice(0, 24);
-        await saveUserProgressCloud({ ...snapshot, draftMaps: nextDrafts }).catch(() => {});
+        const nextSnapshot = { ...snapshot, draftMaps: nextDrafts };
+        await saveUserProgressCloud(nextSnapshot).catch(() => {});
+        if (firebaseUserRef.current) {
+          await saveCloudProgress(firebaseUserRef.current.uid, nextSnapshot).catch(() => {});
+        }
       }
     },
     [authUser, upsertDraftSlot],
@@ -2722,6 +2780,9 @@ export default function App() {
     async (slotId: string) => {
       if (authUser) {
         await deleteCustomMapById(slotId).catch(() => {});
+        if (firebaseUserRef.current) {
+          await deleteCloudCustomMap(firebaseUserRef.current.uid, slotId).catch(() => {});
+        }
       }
       const remaining = draftMaps.filter((m) => m.id !== slotId);
       let nextSlots = remaining;
@@ -2745,7 +2806,11 @@ export default function App() {
       }
       if (authUser && buildUserProgressSnapshotRef.current) {
         const snapshot = buildUserProgressSnapshotRef.current();
-        await saveUserProgressCloud({ ...snapshot, draftMaps: nextSlots }).catch(() => {});
+        const nextSnapshot = { ...snapshot, draftMaps: nextSlots };
+        await saveUserProgressCloud(nextSnapshot).catch(() => {});
+        if (firebaseUserRef.current) {
+          await saveCloudProgress(firebaseUserRef.current.uid, nextSnapshot).catch(() => {});
+        }
       }
     },
     [applyBlueprintInStudioViewport, authUser, draftMaps],
@@ -2767,6 +2832,14 @@ export default function App() {
         },
         true,
       );
+      if (firebaseUserRef.current) {
+        await saveCloudCustomMap(
+          firebaseUserRef.current.uid,
+          authUser.username,
+          published,
+          true,
+        ).catch(() => {});
+      }
       builderDraftBlueprintRef.current = published;
       setBuilderDraftBlueprint(published);
       setActiveCustomBlueprint(published);
@@ -3779,8 +3852,17 @@ export default function App() {
       assists: assists as unknown as Record<string, unknown>,
       drivingCamera,
       graphicsQuality,
+      shadowQuality,
+      textureSize: textureSize === '512' ? 512 : textureSize === '2048' ? 2048 : 1024,
+      renderScale: renderScale === 'fast' ? 0.75 : renderScale === 'balanced' ? 1.0 : 1.25,
       audioVolume,
+      audioMuted,
+      surfaceAudioEnabled,
       hudVisibility,
+      cinematicSettings: cinematicSettings as unknown as Record<string, unknown>,
+      preferredWeather: weatherPreset as WeatherPresetId,
+      preferredSolarDeg: solarAngle,
+      preferredRaceConfig: raceConfig as unknown as Record<string, unknown>,
       stats: userStats,
       creditsCr,
       ownedPartsByCar,
@@ -3792,10 +3874,12 @@ export default function App() {
   }, [
     activeMapId,
     assists,
+    audioMuted,
     audioVolume,
     bestDriftsByKey,
     bestLapsByKey,
     carSetupByCar,
+    cinematicSettings,
     creditsCr,
     draftMaps,
     driverAnalytics,
@@ -3806,11 +3890,18 @@ export default function App() {
     hudVisibility,
     mapCustomizationsByMap,
     ownedPartsByCar,
+    raceConfig,
+    renderScale,
     selectedCarId,
+    shadowQuality,
+    solarAngle,
     speedTrapByKey,
+    surfaceAudioEnabled,
+    textureSize,
     tofuStoryProgress,
     userStats,
     visualConfigByCar,
+    weatherPreset,
   ]);
   buildUserProgressSnapshotRef.current = buildUserProgressSnapshot;
 
@@ -3996,16 +4087,94 @@ export default function App() {
         setRenderScale(getDefaultRenderScaleForPreset(gq));
         controllerRef.current?.setGraphicsQuality(gq);
       }
-      if (typeof progress.audioVolume === 'number') {
-        const vol = Math.max(0, Math.min(1, progress.audioVolume));
-        setAudioVolume(vol);
-        controllerRef.current?.setAudioConfig(vol, audioMutedRef.current);
+      if (
+        progress.shadowQuality === 'off' ||
+        progress.shadowQuality === 'low' ||
+        progress.shadowQuality === 'medium' ||
+        progress.shadowQuality === 'high'
+      ) {
+        setShadowQuality(progress.shadowQuality);
+        controllerRef.current?.setShadowQuality(progress.shadowQuality);
+      }
+      if (
+        progress.textureSize === 512 ||
+        progress.textureSize === 1024 ||
+        progress.textureSize === 2048
+      ) {
+        const nextTexSize: TextureSizeOption =
+          progress.textureSize === 512
+            ? '512'
+            : progress.textureSize === 2048
+              ? '2048'
+              : '1024';
+        setTextureSize(nextTexSize);
+        controllerRef.current?.setTextureSize(nextTexSize);
+      }
+      if (
+        typeof progress.renderScale === 'number' &&
+        Number.isFinite(progress.renderScale) &&
+        progress.renderScale >= 0.4 &&
+        progress.renderScale <= 2.0
+      ) {
+        const nextRenderScale: RenderScaleOption =
+          progress.renderScale <= 0.85
+            ? 'fast'
+            : progress.renderScale <= 1.1
+              ? 'balanced'
+              : 'native';
+        setRenderScale(nextRenderScale);
+        controllerRef.current?.setRenderScale(nextRenderScale);
+      }
+      const nextAudioVol =
+        typeof progress.audioVolume === 'number'
+          ? Math.max(0, Math.min(1, progress.audioVolume))
+          : audioVolumeRef.current;
+      const nextAudioMuted =
+        typeof progress.audioMuted === 'boolean'
+          ? progress.audioMuted
+          : audioMutedRef.current;
+      if (typeof progress.audioVolume === 'number' || typeof progress.audioMuted === 'boolean') {
+        setAudioVolume(nextAudioVol);
+        setAudioMuted(nextAudioMuted);
+        controllerRef.current?.setAudioConfig(nextAudioVol, nextAudioMuted);
+      }
+      if (typeof progress.surfaceAudioEnabled === 'boolean') {
+        setSurfaceAudioEnabled(progress.surfaceAudioEnabled);
+        controllerRef.current?.setSurfaceAudioEnabled?.(progress.surfaceAudioEnabled);
       }
       if (progress.hudVisibility) {
         setHudVisibility({
           ...DEFAULT_HUD_VISIBILITY,
           ...progress.hudVisibility,
         });
+      }
+      if (progress.cinematicSettings && typeof progress.cinematicSettings === 'object') {
+        const mergedCinematic: CinematicSettings = {
+          ...DEFAULT_CINEMATIC_SETTINGS,
+          ...(progress.cinematicSettings as Partial<CinematicSettings>),
+        };
+        setCinematicSettings(mergedCinematic);
+        controllerRef.current?.setCinematicSettings(mergedCinematic);
+      }
+      if (
+        progress.preferredWeather &&
+        ['dry', 'overcast', 'rain', 'sunset_storm', 'deep_morning_mist'].includes(
+          progress.preferredWeather,
+        )
+      ) {
+        setWeatherPreset(progress.preferredWeather as WeatherPreset);
+        controllerRef.current?.setWeatherPreset(progress.preferredWeather as WeatherPreset);
+      }
+      if (typeof progress.preferredSolarDeg === 'number' && Number.isFinite(progress.preferredSolarDeg)) {
+        setSolarAngle(progress.preferredSolarDeg);
+        const nextLabel = controllerRef.current?.setSolarAngle(progress.preferredSolarDeg);
+        if (nextLabel) setPhaseLabel(nextLabel);
+      }
+      if (progress.preferredRaceConfig && typeof progress.preferredRaceConfig === 'object') {
+        setRaceConfig((prev) => ({
+          ...prev,
+          ...(progress.preferredRaceConfig as Partial<RaceConfig>),
+        }));
       }
       if (progress.stats) {
         setUserStats((prev) => ({
@@ -4057,38 +4226,127 @@ export default function App() {
     [applyActiveMapImmediate],
   );
 
-  // Restore stored auth session & connect WebSocket on boot
-  useEffect(() => {
-    const token = getStoredAuthToken();
-    if (!token) {
-      setAuthChecking(false);
-      return;
-    }
-    let cancelled = false;
-    void fetchCurrentUser()
-      .then(({ user, progress }) => {
-        if (cancelled) return;
-        setAuthUser(user);
-        applyCloudProgress(progress);
-        multiplayerClient.connect(token);
+  const syncFirebaseUserSession = useCallback(
+    async (fbUser: FirebaseUser) => {
+      if (syncingFirebaseUidRef.current === fbUser.uid) return;
+      syncingFirebaseUidRef.current = fbUser.uid;
+      firebaseUserRef.current = fbUser;
+      try {
+        const accountDoc = await ensureFirebaseUserAccount(fbUser);
+        const idToken = await fbUser.getIdToken();
+        const localSnapshot = buildUserProgressSnapshotRef.current
+          ? buildUserProgressSnapshotRef.current()
+          : undefined;
+        const localVault = loadLocalProgressVault(accountDoc.username);
+        const seedLocal =
+          localSnapshot && localVault
+            ? mergeProgressSnapshots(localSnapshot, localVault)
+            : (localSnapshot ?? localVault ?? undefined);
+
+        const [serverRes, cloudData] = await Promise.all([
+          loginWithFirebaseIdToken(idToken, accountDoc.username, seedLocal),
+          loadCloudUserData(fbUser.uid),
+        ]);
+
+        const primaryProgress = cloudData.progress ?? serverRes.progress;
+        const mergedWithServer = mergeProgressSnapshots(primaryProgress, serverRes.progress);
+        const finalMerged = mergeProgressSnapshots(mergedWithServer, localVault);
+
+        const syncedUser: AuthUser = {
+          ...serverRes.user,
+          email: fbUser.email ?? accountDoc.email,
+          authProvider: 'google',
+        };
+        setAuthUser(syncedUser);
+        setAuthChecking(false);
+        setAuthModalOpen(false);
+        applyCloudProgress(finalMerged);
+        saveLocalProgressVault(syncedUser.username, finalMerged);
+        multiplayerClient.connect(serverRes.token);
+
+        if (cloudData.draftMaps.length > 0) {
+          mergeCloudDraftMaps(cloudData.draftMaps);
+        }
         void fetchMyMaps()
           .then((serverMaps) => {
-            if (!cancelled) mergeCloudDraftMaps(serverMaps);
+            mergeCloudDraftMaps(serverMaps);
+            if (!cloudData.progress) {
+              for (const sm of serverMaps) {
+                void saveCloudCustomMap(fbUser.uid, syncedUser.username, sm, sm.isPublished).catch(
+                  () => {},
+                );
+              }
+            }
           })
           .catch(() => {});
-      })
-      .catch(() => {
-        // Token expired or invalid -> fall back to mandatory auth gate
-      })
-      .finally(() => {
-        if (!cancelled) setAuthChecking(false);
-      });
+
+        void saveCloudProgress(fbUser.uid, finalMerged).catch(() => {});
+        void saveUserProgressCloud(finalMerged).catch(() => {});
+      } finally {
+        if (syncingFirebaseUidRef.current === fbUser.uid) {
+          syncingFirebaseUidRef.current = null;
+        }
+      }
+    },
+    [applyCloudProgress, mergeCloudDraftMaps],
+  );
+
+  // Restore stored Firebase Google or server session & connect WebSocket on boot
+  useEffect(() => {
+    let cancelled = false;
+    let fallbackChecked = false;
+    setAuthChecking(true);
+
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (cancelled) return;
+      if (fbUser) {
+        firebaseUserRef.current = fbUser;
+        void syncFirebaseUserSession(fbUser)
+          .catch(() => {
+            if (!cancelled) setAuthChecking(false);
+          });
+        return;
+      }
+
+      firebaseUserRef.current = null;
+      if (fallbackChecked) {
+        setAuthChecking(false);
+        return;
+      }
+      fallbackChecked = true;
+
+      const token = getStoredAuthToken();
+      if (!token) {
+        setAuthChecking(false);
+        return;
+      }
+      void fetchCurrentUser()
+        .then(({ user, progress }) => {
+          if (cancelled) return;
+          setAuthUser(user);
+          applyCloudProgress(progress);
+          multiplayerClient.connect(token);
+          void fetchMyMaps()
+            .then((serverMaps) => {
+              if (!cancelled) mergeCloudDraftMaps(serverMaps);
+            })
+            .catch(() => {});
+        })
+        .catch(() => {
+          // Token expired or invalid -> fall back to mandatory auth gate
+        })
+        .finally(() => {
+          if (!cancelled) setAuthChecking(false);
+        });
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [applyCloudProgress, mergeCloudDraftMaps]);
+  }, [applyCloudProgress, mergeCloudDraftMaps, syncFirebaseUserSession]);
 
-  // Auto-save cloud progress & local backup vault so updates never reset progress
+  // Auto-save cloud progress (Firestore + server + local backup vault)
   useEffect(() => {
     if (!authUser || !cloudHydratedRef.current) return;
     const snapshot = buildUserProgressSnapshot();
@@ -4096,11 +4354,38 @@ export default function App() {
     if (appMode === 'racing') return;
     const timer = window.setTimeout(() => {
       void saveUserProgressCloud(snapshot).catch(() => {});
+      if (firebaseUserRef.current) {
+        void saveCloudProgress(firebaseUserRef.current.uid, snapshot).catch(() => {});
+      }
     }, 1800);
     return () => window.clearTimeout(timer);
   }, [appMode, authUser, buildUserProgressSnapshot]);
 
-  // Launch 3D multiplayer party session (either race or explore free-roam)
+  // Flush cloud progress when tab goes background or closes
+  useEffect(() => {
+    const flushNow = () => {
+      const currentUser = authUserRef.current;
+      const snapFn = buildUserProgressSnapshotRef.current;
+      if (!currentUser || !cloudHydratedRef.current || !snapFn) return;
+      const snapshot = snapFn();
+      saveLocalProgressVault(currentUser.username, snapshot);
+      void saveUserProgressCloud(snapshot).catch(() => {});
+      if (firebaseUserRef.current) {
+        void saveCloudProgress(firebaseUserRef.current.uid, snapshot).catch(() => {});
+      }
+    };
+    const onVisChange = () => {
+      if (document.visibilityState === 'hidden') flushNow();
+    };
+    window.addEventListener('pagehide', flushNow);
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      document.removeEventListener('visibilitychange', onVisChange);
+    };
+  }, []);
+
+  // Launch 3D multiplayer party session (all party activity modes)
   const launchPartyDrive = useCallback(
     (room: PartyRoomState) => {
       const selected = GARAGE_CARS[carIndex];
@@ -4129,22 +4414,41 @@ export default function App() {
 
           const collisionActive =
             room.collisionMode === 'collide' ||
-            (room.collisionMode === 'race_only' && room.activityMode === 'race');
+            (room.collisionMode === 'race_only' &&
+              room.activityMode !== 'explore' &&
+              room.activityMode !== 'time_trial');
+
+          let mappedMode: RaceConfig['mode'] = 'sprint';
+          let mappedIncludeAi = false;
+          let mappedLaps = Math.max(0, room.laps);
+          if (room.activityMode === 'explore') {
+            mappedMode = 'time_trial';
+            mappedLaps = 0;
+          } else if (room.activityMode === 'time_trial') {
+            mappedMode = 'time_trial';
+            mappedLaps = Math.max(0, room.laps);
+          } else if (room.activityMode === 'drift' || room.activityMode === 'tandem_drift') {
+            mappedMode = 'drift';
+            mappedLaps = Math.max(0, room.laps);
+          } else if (room.activityMode === 'endurance') {
+            mappedMode = 'endurance';
+            mappedLaps = Math.max(1, room.laps || 5);
+          } else if (room.activityMode === 'ai_race') {
+            mappedMode = 'sprint';
+            mappedIncludeAi = true;
+            mappedLaps = Math.max(1, room.laps || 3);
+          } else {
+            mappedMode = 'sprint';
+            mappedIncludeAi = false;
+            mappedLaps = Math.max(1, room.laps || 3);
+          }
 
           const partyRaceConfig: RaceConfig = {
             ...raceConfig,
-            mode:
-              room.activityMode === 'explore'
-                ? 'time_trial'
-                : room.activityMode === 'tandem_drift'
-                ? 'drift'
-                : 'sprint',
-            lapCount:
-              room.activityMode === 'explore'
-                ? 0
-                : room.activityMode === 'tandem_drift'
-                ? Math.max(0, room.laps)
-                : Math.max(1, room.laps),
+            mode: mappedMode,
+            lapCount: mappedLaps,
+            includeAiRivals: mappedIncludeAi,
+            difficulty: room.aiDifficulty ?? raceConfig.difficulty ?? 'pro',
             startCountdownMode: room.activityMode === 'explore' ? 'instant' : 'quick',
           };
           setRaceConfig(partyRaceConfig);
@@ -4193,10 +4497,12 @@ export default function App() {
         setActiveParty(evt.room);
         const collisionEnabled =
           evt.room.collisionMode === 'collide' ||
-          (evt.room.collisionMode === 'race_only' && evt.room.activityMode === 'race');
+          (evt.room.collisionMode === 'race_only' &&
+            evt.room.activityMode !== 'explore' &&
+            evt.room.activityMode !== 'time_trial');
         controllerRef.current?.setMultiplayerCollisionEnabled(collisionEnabled);
 
-        const sessionKey = `${evt.room.id}:${evt.room.mapId}:${evt.room.customMapId ?? ''}:${evt.room.activityMode}`;
+        const sessionKey = `${evt.room.id}:${evt.room.mapId}:${evt.room.customMapId ?? ''}:${evt.room.activityMode}:${evt.room.aiDifficulty ?? ''}`;
         if (
           (evt.room.status === 'active' || evt.room.status === 'countdown') &&
           launchedPartySessionRef.current !== sessionKey
@@ -4252,6 +4558,19 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [activeParty, authUser, appMode]);
 
+  const handleGoogleLogin = useCallback(async () => {
+    const fbUser = await signInWithGoogleCloud();
+    await syncFirebaseUserSession(fbUser);
+  }, [syncFirebaseUserSession]);
+
+  const handleUpdateUsername = useCallback(async (nextName: string) => {
+    if (firebaseUserRef.current) {
+      await updateCloudUsername(firebaseUserRef.current, nextName);
+    }
+    const updated = await updateBackendUsername(nextName);
+    setAuthUser((prev) => (prev ? { ...prev, username: updated.username } : updated));
+  }, []);
+
   const handleLoginSubmit = useCallback(
     async (username: string, password: string) => {
       const res = await loginWithUsername(username, password);
@@ -4296,8 +4615,13 @@ export default function App() {
       const snap = buildUserProgressSnapshot();
       saveLocalProgressVault(authUser.username, snap);
       await saveUserProgressCloud(snap).catch(() => {});
+      if (firebaseUserRef.current) {
+        await saveCloudProgress(firebaseUserRef.current.uid, snap).catch(() => {});
+      }
     }
     multiplayerClient.disconnect();
+    await signOutGoogleCloud().catch(() => {});
+    firebaseUserRef.current = null;
     await logoutAccount();
     cloudHydratedRef.current = false;
     hasUserSelectedCarRef.current = false;
@@ -5107,6 +5431,7 @@ export default function App() {
         defaultUsername={getLastSignedInUsername()}
         user={authUser}
         stats={userStats}
+        cloudHealth={cloudHealth}
         onClose={() => {
           if (authUserRef.current) setAuthModalOpen(false);
         }}
@@ -5114,6 +5439,8 @@ export default function App() {
           setAuthModalOpen(false);
           handleOpenPlayerProfile(authUser ? authUser.username : '__local__');
         }}
+        onGoogleLogin={handleGoogleLogin}
+        onUpdateUsername={handleUpdateUsername}
         onLogin={handleLoginSubmit}
         onSignup={handleSignupSubmit}
         onLogout={handleLogout}

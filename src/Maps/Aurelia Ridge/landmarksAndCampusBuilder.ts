@@ -985,9 +985,9 @@ export function buildLandmarksAndCampusRig(
   // ---------------------------------------------------------------------------
   // 4. NATURAL LIMESTONE CANYON ROCK ARCH (North Summit Crest, 16.5m+ clearance)
   // ---------------------------------------------------------------------------
-  let archIdx = Math.floor(0.65 * N);
+  let archIdx = Math.floor(0.68 * N);
   let bestSummitY = -Infinity;
-  for (let i = Math.floor(0.6 * N); i < Math.floor(0.72 * N); i++) {
+  for (let i = Math.floor(0.58 * N); i < Math.floor(0.78 * N); i++) {
     const s = samples[i % N];
     if (!s.isBridge && s.position.y > bestSummitY && Math.abs(s.curvature) < 0.009) {
       bestSummitY = s.position.y;

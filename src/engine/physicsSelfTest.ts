@@ -361,6 +361,40 @@ export function runQuickPhysicsSelfTests(): SelfTestSuiteResult {
     });
   }
 
+  // 8. High-Speed Straight Tracking (Zero-Steer Stability, Toe-In & Mild Bank/Bump Perturbation)
+  {
+    const eng = createFlatEngine('bmw-m4-gt3-evo');
+    eng.setStateForTest({ vz: 52, vx: 1.6, omega: 0.08, gear: 4, countdownTimer: 0 });
+    let maxLatDeviation = 0;
+    let maxLatVel = 0;
+    let tlm!: VehicleTelemetry;
+    for (let i = 0; i < 180; i++) {
+      tlm = eng.step(
+        1 / 60,
+        { ...IDLE_INPUT, throttle: true, throttleVal: 0.85 },
+        { ...DEFAULT_SIM_ASSISTS, physicsPreset: 'simcade' },
+        'dry',
+      );
+      maxLatDeviation = Math.max(maxLatDeviation, Math.abs(eng.pos.x));
+      if (i > 45) {
+        const bodyLatVel = eng.vx * Math.cos(eng.yaw) - eng.vz * Math.sin(eng.yaw);
+        maxLatVel = Math.max(maxLatVel, Math.abs(bodyLatVel));
+      }
+    }
+    const passed =
+      maxLatDeviation < 1.8 &&
+      maxLatVel < 0.25 &&
+      Math.abs(eng.omega) < 0.03 &&
+      Math.abs(eng.steerAngleFL * 57.2958) < 0.15 &&
+      Math.abs(tlm.steerNorm) < 0.01;
+    results.push({
+      id: 'straight_tracking',
+      label: 'Straight-Line Stability (Zero Phantom Drift)',
+      passed,
+      metric: `|ΔX|≤${maxLatDeviation.toFixed(2)}m, |vLat|≤${maxLatVel.toFixed(2)}m/s`,
+    });
+  }
+
   const tEnd = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const passedCount = results.filter((r) => r.passed).length;
   return {

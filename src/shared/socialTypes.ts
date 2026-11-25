@@ -194,6 +194,8 @@ export interface AuthUser {
   id: string;
   username: string;
   createdAt: number;
+  email?: string | null;
+  authProvider?: 'google' | 'local';
 }
 
 export interface UserCareerStats {
@@ -261,8 +263,17 @@ export interface UserProgressData {
   assists?: Record<string, unknown>;
   drivingCamera?: string;
   graphicsQuality?: string;
+  shadowQuality?: string;
+  textureSize?: number;
+  renderScale?: number;
   audioVolume?: number;
+  audioMuted?: boolean;
+  surfaceAudioEnabled?: boolean;
   hudVisibility?: HudVisibilityConfig;
+  cinematicSettings?: Record<string, unknown>;
+  preferredWeather?: WeatherPresetId;
+  preferredSolarDeg?: number;
+  preferredRaceConfig?: Record<string, unknown>;
   tofuStoryProgress?: Record<
     string,
     {
@@ -318,6 +329,11 @@ export function createEmptyUserProgress(): UserProgressData {
     speedTrapRecords: {},
     draftMaps: [],
     hudVisibility: { ...DEFAULT_HUD_VISIBILITY },
+    audioVolume: 0.72,
+    audioMuted: false,
+    surfaceAudioEnabled: true,
+    preferredWeather: 'dry',
+    preferredSolarDeg: 168,
     tofuStoryProgress: {},
     stats: {
       racesCompleted: 0,
@@ -369,9 +385,97 @@ export interface FriendsOverview {
 }
 
 export type PartyVisibility = 'public' | 'friends' | 'private';
-export type PartyActivityMode = 'race' | 'explore' | 'tandem_drift';
+export type PartyActivityMode =
+  | 'explore'
+  | 'race'
+  | 'ai_race'
+  | 'drift'
+  | 'tandem_drift'
+  | 'time_trial'
+  | 'endurance';
+export type PartyAiDifficulty = 'novice' | 'pro' | 'elite';
 export type PartyCollisionMode = 'ghost' | 'collide' | 'race_only';
 export type PartySessionStatus = 'lobby' | 'countdown' | 'active' | 'finished';
+
+export interface PartyModeDescriptor {
+  id: PartyActivityMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+  defaultLaps: number;
+  allowsLaps: boolean;
+  hasAiDifficulty: boolean;
+}
+
+export const PARTY_ACTIVITY_MODES: PartyModeDescriptor[] = [
+  {
+    id: 'explore',
+    label: 'No Mode (Free Roam)',
+    shortLabel: 'No Mode',
+    description: 'Open cruise with friends, zero laps & instant track entry',
+    defaultLaps: 0,
+    allowsLaps: false,
+    hasAiDifficulty: false,
+  },
+  {
+    id: 'race',
+    label: 'PVP Race',
+    shortLabel: 'PVP Race',
+    description: 'Players-only competitive race (no AI traffic)',
+    defaultLaps: 3,
+    allowsLaps: true,
+    hasAiDifficulty: false,
+  },
+  {
+    id: 'ai_race',
+    label: 'AI Mode',
+    shortLabel: 'AI Mode',
+    description: 'Multiplayer drivers plus competitive AI grid rivals',
+    defaultLaps: 3,
+    allowsLaps: true,
+    hasAiDifficulty: true,
+  },
+  {
+    id: 'drift',
+    label: 'Drift Mode',
+    shortLabel: 'Drift Mode',
+    description: 'High-angle slip-score battle on any track or touge',
+    defaultLaps: 3,
+    allowsLaps: true,
+    hasAiDifficulty: false,
+  },
+  {
+    id: 'tandem_drift',
+    label: 'Tandem Drift',
+    shortLabel: 'Tandem Drift',
+    description: 'Door-to-door proximity drift chains with x3.5 multipliers',
+    defaultLaps: 3,
+    allowsLaps: true,
+    hasAiDifficulty: false,
+  },
+  {
+    id: 'time_trial',
+    label: 'Time Trial',
+    shortLabel: 'Time Trial',
+    description: 'Clean shared hotlap session to set fastest sector times',
+    defaultLaps: 0,
+    allowsLaps: true,
+    hasAiDifficulty: false,
+  },
+  {
+    id: 'endurance',
+    label: 'Endurance',
+    shortLabel: 'Endurance',
+    description: '2.25x tire wear, fuel burn & mandatory pit lane strategy',
+    defaultLaps: 5,
+    allowsLaps: true,
+    hasAiDifficulty: false,
+  },
+];
+
+export function getPartyModeMeta(mode: PartyActivityMode): PartyModeDescriptor {
+  return PARTY_ACTIVITY_MODES.find((m) => m.id === mode) ?? PARTY_ACTIVITY_MODES[0];
+}
 
 export interface PartyMemberState {
   userId: string;
@@ -441,6 +545,7 @@ export interface PartyRoomSummary {
   hostUsername: string;
   visibility: PartyVisibility;
   activityMode: PartyActivityMode;
+  aiDifficulty?: PartyAiDifficulty;
   collisionMode: PartyCollisionMode;
   mapId: string;
   tougeDirection?: 'downhill' | 'uphill';
@@ -469,6 +574,7 @@ export interface PartyInviteNotification {
   roomCode: string;
   roomName: string;
   activityMode: PartyActivityMode;
+  aiDifficulty?: PartyAiDifficulty;
   mapId?: string;
   mapTitle: string;
   mapType?: MapTypeTag;
